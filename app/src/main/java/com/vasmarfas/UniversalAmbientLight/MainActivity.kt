@@ -147,11 +147,7 @@ class MainActivity : ComponentActivity() {
             val error = intent.getStringExtra(ScreenGrabberService.BROADCAST_ERROR)
             val tclBlocked = intent.getBooleanExtra(ScreenGrabberService.BROADCAST_TCL_BLOCKED, false)
 
-            // Defer UI side-effects (dialog/toast) to the next main-thread cycle so
-            // we return from onReceive quickly. LocalBroadcastManager drains the
-            // entire pending queue synchronously inside one Handler message;
-            // showing a dialog or invoking a shell-exec callback in here can stall
-            // the broadcaster thread and trip a "slow operations in main thread" ANR.
+            // Defer dialog/toast off LocalBroadcastManager's drain to avoid main-thread stalls.
             if (tclBlocked && !mTclWarningShown) {
                 mTclWarningShown = true
                 window.decorView.post {
@@ -183,10 +179,7 @@ class MainActivity : ComponentActivity() {
 
         mMediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
-        // Initialize Play In-App Updates lazily — AppUpdateManagerFactory.create() and the
-        // initial appUpdateInfo task can take 200-500ms on cold start (Play Services init).
-        // Deferring them to the next main-loop cycle keeps onCreate under the ANR window
-        // on low-end TV boxes (was line ~195 in the ANR report, just before setContent).
+        // Defer the Play update check to the next main-loop cycle — keeps onCreate cheap on TV.
         appUpdateManager = AppUpdateManagerFactory.create(this)
         window.decorView.post { checkForUpdates() }
 
@@ -310,17 +303,26 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    REQUEST_NOTIFICATION_PERMISSION
-                )
-            }
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            == PackageManager.PERMISSION_GRANTED
+        ) return
+
+        // shouldShowRequestPermissionRationale returns false both on the first ask AND
+        // after "Don't ask again" — disambiguate via a one-time pref so we stop spamming.
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val askedBefore = prefs.getBoolean(PREF_NOTIF_PERMISSION_ASKED, false)
+        if (askedBefore && !ActivityCompat.shouldShowRequestPermissionRationale(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            )
+        ) return
+
+        prefs.edit { putBoolean(PREF_NOTIF_PERMISSION_ASKED, true) }
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_NOTIFICATION_PERMISSION
+        )
     }
 
     private fun toggleScreenCapture() {
@@ -580,13 +582,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun isServiceRunning(): Boolean {
-        // ActivityManager.getRunningServices(Int.MAX_VALUE) is deprecated on API 26+,
-        // returns only our own services anyway, and iterates a system list that can be
-        // slow on stressed devices (was a contributor to MainActivity.onCreate ANRs).
-        // ScreenGrabberService runs in our own process, so a static flag is accurate.
-        return ScreenGrabberService.sInstanceRunning
-    }
+    private fun isServiceRunning(): Boolean = ScreenGrabberService.sInstanceRunning
 
     companion object {
         const val REQUEST_MEDIA_PROJECTION = 1
@@ -594,7 +590,8 @@ class MainActivity : ComponentActivity() {
         private const val REQUEST_OVERLAY_PERMISSION = 3
         private const val REQUEST_UPDATE_CODE = 4
         private const val REQUEST_CAMERA_PERMISSION = 5
-        private const val TAG = "DEBUG"
+        private const val TAG = "MainActivity"
+        private const val PREF_NOTIF_PERMISSION_ASKED = "notif_permission_asked"
     }
 }
 

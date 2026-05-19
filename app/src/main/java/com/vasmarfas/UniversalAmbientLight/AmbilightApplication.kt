@@ -21,29 +21,15 @@ class AmbilightApplication : Application() {
     }
 
     /**
-     * Filters out a known Android framework NPE delivered from the system
-     * MediaCodec's DisplayListener when a display is removed (e.g. HDMI unplug
-     * on NVIDIA SHIELD, certain Sony TVs). The crash signature is:
-     *
-     *   java.lang.NullPointerException at
-     *     android.media.MediaCodec$1.onDisplayChanged(MediaCodec.java)
-     *
-     * No app code is on the stack — MediaCodec installs the listener internally
-     * and Android forgets to null-check DisplayInfo. We cannot prevent the
-     * crash from the encoder side because the listener outlives our release()
-     * calls on affected firmware. Catching it at the global handler is the
-     * pragmatic workaround used by several large apps (see crbug.com/1163307
-     * for the Chromium equivalent).
+     * Swallows the Android-framework NPE emitted from MediaCodec's internal
+     * DisplayListener on display removal (NVIDIA SHIELD HDMI unplug, etc.).
+     * Listener outlives release() on affected firmware; no app frames in stack.
      */
     private fun installFrameworkBugFilter() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             if (isMediaCodecDisplayListenerNpe(throwable)) {
-                Log.w(
-                    "AmbilightApplication",
-                    "Swallowed framework MediaCodec.onDisplayChanged NPE on ${thread.name}",
-                    throwable
-                )
+                Log.w("AmbilightApplication", "Swallowed MediaCodec.onDisplayChanged NPE on ${thread.name}", throwable)
                 return@setDefaultUncaughtExceptionHandler
             }
             previous?.uncaughtException(thread, throwable)
@@ -54,16 +40,9 @@ class AmbilightApplication : Application() {
         if (t !is NullPointerException) return false
         val frames = t.stackTrace
         if (frames.isEmpty()) return false
-        // Top frame must be MediaCodec's anonymous DisplayListener; we further
-        // require DisplayManagerGlobal to be on the stack so we don't swallow
-        // unrelated NPEs that happen to mention MediaCodec.
         val top = frames[0]
-        val matchesTop = top.className.startsWith("android.media.MediaCodec") &&
-                top.methodName == "onDisplayChanged"
-        if (!matchesTop) return false
-        return frames.any {
-            it.className.startsWith("android.hardware.display.DisplayManagerGlobal")
-        }
+        if (!top.className.startsWith("android.media.MediaCodec") || top.methodName != "onDisplayChanged") return false
+        return frames.any { it.className.startsWith("android.hardware.display.DisplayManagerGlobal") }
     }
 
     private fun migratePreferences() {

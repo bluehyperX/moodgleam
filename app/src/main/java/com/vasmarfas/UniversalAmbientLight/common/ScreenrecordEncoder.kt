@@ -129,7 +129,7 @@ class ScreenrecordEncoder(
         val codecFailureFlag = java.util.concurrent.atomic.AtomicBoolean(false)
         val hasDecodedFrame = java.util.concurrent.atomic.AtomicBoolean(false)
         val framesDecoded = java.util.concurrent.atomic.AtomicInteger(0)
-        var bytesReceived = 0L
+        val bytesReceived = java.util.concurrent.atomic.AtomicLong(0L)
 
         try {
             Log.i(TAG, "ADB connecting port=$mAdbPort…")
@@ -206,7 +206,7 @@ class ScreenrecordEncoder(
                                             hasDecodedFrame.set(true)
                                             lastDecodeActivity.set(System.currentTimeMillis())
                                             if (decoded == 1) Log.i(TAG, "✓ First frame decoded (${img.width}×${img.height})")
-                                            if (decoded % 100 == 0) Log.d(TAG, "Frames: $decoded, bytes in: $bytesReceived, queue: ${mDataQueue.size}")
+                                            if (decoded % 100 == 0) Log.d(TAG, "Frames: $decoded, bytes in: ${bytesReceived.get()}, queue: ${mDataQueue.size}")
                                         } finally {
                                             img.close()
                                         }
@@ -260,7 +260,7 @@ class ScreenrecordEncoder(
                 lastDecodeActivity.set(now)
                 val hex = chunk.take(minOf(firstRead, 8)).joinToString(" ") { "%02X".format(it) }
                 Log.i(TAG, "First $firstRead bytes: $hex  (H264 Annex B starts with 00 00 00 01)")
-                bytesReceived += firstRead
+                bytesReceived.addAndGet(firstRead.toLong())
                 mDataQueue.put(chunk.copyOf(firstRead))
             } else {
                 Log.e(TAG, "screenrecord returned no data (firstRead=$firstRead). Command not supported?")
@@ -279,12 +279,12 @@ class ScreenrecordEncoder(
                 }
                 val n = inputStream.read(chunk)
                 if (n < 0) {
-                    Log.i(TAG, "ADB stream EOF after $bytesReceived bytes, ${framesDecoded.get()} frames decoded")
+                    Log.i(TAG, "ADB stream EOF after ${bytesReceived.get()} bytes, ${framesDecoded.get()} frames decoded")
                     break
                 }
                 if (n == 0) continue
                 lastDataActivity.set(System.currentTimeMillis())
-                bytesReceived += n
+                bytesReceived.addAndGet(n.toLong())
                 mDataQueue.put(chunk.copyOf(n))
             }
             cleanExit = true

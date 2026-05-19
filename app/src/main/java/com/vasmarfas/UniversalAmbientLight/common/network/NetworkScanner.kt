@@ -146,10 +146,11 @@ class NetworkScanner {
                     }
                 }
 
-                @Suppress("UNCHECKED_CAST")
-                return allIpsToTry as Array<String>
+                // Some interfaces may have produced fewer than 254 entries (parsing
+                // failures, IPv6-only interfaces, etc.) — filter out null slots so the
+                // unchecked cast doesn't surface NPEs at scan time.
+                return allIpsToTry.filterNotNull().toTypedArray()
             } catch (e: Exception) {
-                // for now eat exceptions
                 Log.e("HYPERION SCANNER", "Error while building list of subnet ip's", e)
                 return emptyArray()
             }

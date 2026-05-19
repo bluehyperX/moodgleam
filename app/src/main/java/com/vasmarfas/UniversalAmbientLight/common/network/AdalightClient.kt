@@ -117,7 +117,6 @@ class AdalightClient(
 
         mPort = ports[0]
 
-        // Try to open device connection
         val connection = usbManager.openDevice(device)
             ?: throw IOException("Failed to open USB device. Please check USB connection and try again")
 
@@ -132,6 +131,11 @@ class AdalightClient(
             )
         } catch (e: Exception) {
             mConnected = false
+            // Release the underlying USB connection before failing — otherwise the device
+            // stays "busy" and subsequent reconnect attempts fail until the app restarts.
+            try { mPort?.close() } catch (_: Exception) {}
+            try { connection.close() } catch (_: Exception) {}
+            mPort = null
             throw IOException(
                 "Failed to configure USB serial port: " + e.message +
                         ". Try different baud rate or check device compatibility", e

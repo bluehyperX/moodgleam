@@ -88,29 +88,16 @@ object UsbSerialPermissionHelper {
             return true
         }
 
-        // Try granting via root BEFORE showing the system permission dialog.
-        // The root grant shells out to `su` which can block for hundreds of ms
-        // (sometimes seconds on stressed devices) — running it on main thread
-        // caused ANRs. Defer to a background thread; if root grants permission
-        // we invoke onReady, otherwise we fall through to the standard
-        // requestPermission() flow below on the main thread.
+        // Try root before the system permission dialog — `su` is blocking, so run async.
         if (UsbRootPermissionHelper.isRootAvailable()) {
-            // Avoid spamming the same prompt (matches the synchronous path below).
-            if (!force && lastRequestedDeviceId == target.deviceId) {
-                return false
-            }
+            if (!force && lastRequestedDeviceId == target.deviceId) return false
             lastRequestedDeviceId = target.deviceId
 
             UsbRootPermissionHelper.grantPermissionViaRootAsync(context) { rootGranted ->
                 if (rootGranted && usbManager.hasPermission(target)) {
                     onReady()
                 } else {
-                    // Root path didn't work — clear the rate-limit token and fall back
-                    // to the standard system permission dialog on the next user action.
-                    // We intentionally do NOT auto-trigger the system dialog here: this
-                    // helper is invoked from many entry points (onResume, USB attach
-                    // receiver) and surprising the user with a dialog they didn't trigger
-                    // is worse than waiting for them to tap "start" again.
+                    // Clear the rate-limit token so the next user-initiated start can prompt.
                     lastRequestedDeviceId = null
                     onDenied?.invoke()
                 }

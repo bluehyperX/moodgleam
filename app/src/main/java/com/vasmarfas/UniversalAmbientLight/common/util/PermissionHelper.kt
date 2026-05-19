@@ -12,9 +12,13 @@ import android.os.Process
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 object PermissionHelper {
     private const val TAG = "PermissionHelper"
+    private const val SHELL_CMD_TIMEOUT_SEC = 2L
+    private val sShellGrantInFlight = AtomicBoolean(false)
 
     fun canDrawOverlays(context: Context): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -112,6 +116,8 @@ object PermissionHelper {
     }
 
     fun tryGrantProjectMediaViaShell(context: Context) {
+        if (!sShellGrantInFlight.compareAndSet(false, true)) return
+
         Thread {
             try {
                 val pkg = context.packageName
@@ -123,18 +129,25 @@ object PermissionHelper {
                 )
 
                 for (cmd in commands) {
+                    var process: java.lang.Process? = null
                     try {
-                        val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
-                        process.waitFor()
+                        process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+                        if (!process.waitFor(SHELL_CMD_TIMEOUT_SEC, TimeUnit.SECONDS)) {
+                            try { process.destroyForcibly() } catch (_: Exception) {}
+                            continue
+                        }
                         Log.d(TAG, "Executed: $cmd (exit: ${process.exitValue()})")
                     } catch (e: Exception) {
+                        try { process?.destroyForcibly() } catch (_: Exception) {}
                         Log.w(TAG, "Command failed: $cmd")
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Shell commands failed", e)
+            } finally {
+                sShellGrantInFlight.set(false)
             }
-        }.start()
+        }.apply { isDaemon = true; name = "ShellGrantAsync" }.start()
     }
 
     fun showFullPermissionDialog(activity: Activity, onRetry: Runnable?) {

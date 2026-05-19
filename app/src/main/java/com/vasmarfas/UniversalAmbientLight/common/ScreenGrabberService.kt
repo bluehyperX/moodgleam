@@ -295,25 +295,18 @@ class ScreenGrabberService : Service() {
         return true
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    @RequiresApi(Build.VERSION_CODES.R)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (DEBUG) Log.v(TAG, "Start command received")
 
-        // CRITICAL: Android requires startForeground() within ~5s of every
-        // startForegroundService() call, regardless of action or current state.
-        // Previously startForeground was only called inside ACTION_START/ACTION_START_CAMERA,
-        // which meant ACTION_STOP/ACTION_CLEAR/GET_STATUS/ACTION_EXIT and re-issued
-        // ACTION_START while already running could trigger
-        // ForegroundServiceDidNotStartInTimeException (FATAL).
+        // Must call startForeground within ~5s of every startForegroundService call
+        // regardless of action, otherwise Android throws ForegroundServiceDidNotStartInTime.
         ensureForegroundStarted(initialForegroundTypeFor(intent?.action))
 
         super.onStartCommand(intent, flags, startId)
         if (intent == null || intent.action == null) {
             val nullItem = if (intent == null) "intent" else "action"
             if (DEBUG) Log.v(TAG, "Null $nullItem provided to start command")
-            // Service was restarted by Android (START_STICKY) without a valid intent.
-            // Foreground was already (re)started above; just stop since there's
-            // no projection token to resume with.
             stopSelf()
             return START_NOT_STICKY
         } else {
@@ -456,25 +449,14 @@ class ScreenGrabberService : Service() {
         }
     }
 
-    /**
-     * Picks the most-specific foreground type for the action at the top of onStartCommand.
-     * Used by [ensureForegroundStarted] to satisfy Android's 5-second window even before
-     * we've decided whether to actually start capture.
-     */
-    private fun initialForegroundTypeFor(action: String?): Int {
-        return when (action) {
-            ACTION_START_CAMERA -> ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            ACTION_START -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            else -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-        }
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun initialForegroundTypeFor(action: String?): Int = when (action) {
+        ACTION_START_CAMERA -> ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+        ACTION_START -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        else -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
     }
 
-    /**
-     * Idempotent startForeground guard. Always call early in onStartCommand so we
-     * never miss the 5-second window. TCL/restricted-OEM failures are recorded but
-     * don't bubble up — the action-specific [tryStartForegroundCompat] path handles
-     * retry/notify when capture is actually being requested.
-     */
+    /** Idempotent startForeground — safe to call multiple times. */
     private fun ensureForegroundStarted(type: Int) {
         if (mForegroundStarted) return
         try {
@@ -494,7 +476,6 @@ class ScreenGrabberService : Service() {
     }
 
     private fun tryStartForegroundCompat(type: Int): Boolean {
-        // Already foregrounded by ensureForegroundStarted() — nothing to do.
         if (mForegroundStarted) {
             mForegroundFailed = false
             mTclBlocked = false
@@ -823,6 +804,7 @@ class ScreenGrabberService : Service() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.R)
     private fun startAlternativeRecord(method: String) {
         if (DEBUG) Log.v(TAG, "Starting alternative recorder: $method")
         val thread = mHyperionThread
@@ -1157,12 +1139,7 @@ class ScreenGrabberService : Service() {
 
         private var sMediaProjection: MediaProjection? = null
 
-        /**
-         * True while the service instance is alive (onCreate to onDestroy).
-         * Used by MainActivity instead of the slow/deprecated
-         * ActivityManager.getRunningServices() check. The service runs in the
-         * same process as MainActivity, so a static flag is accurate.
-         */
+        /** True while the service instance is alive (onCreate→onDestroy). */
         @Volatile @JvmStatic
         var sInstanceRunning: Boolean = false
             internal set

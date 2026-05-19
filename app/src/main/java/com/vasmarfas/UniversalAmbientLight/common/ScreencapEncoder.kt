@@ -15,6 +15,7 @@ import java.io.File
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.TimeUnit
 import kotlin.math.max
 
 /**
@@ -113,12 +114,24 @@ class ScreencapEncoder(
     }
 
     private fun startCapture() {
+        cleanupStaleCaptureFiles()
         mThread = HandlerThread(TAG, Process.THREAD_PRIORITY_BACKGROUND)
         mThread!!.start()
         mHandler = Handler(mThread!!.looper)
         mRunning = true
         mCapturing = true
         mHandler!!.post(mCaptureRunnable)
+    }
+
+    private fun cleanupStaleCaptureFiles() {
+        // File-mode fallback writes cap_*.png to externalCacheDir. If the previous
+        // session crashed mid-capture these accumulate and eventually fill the volume.
+        try {
+            val dir = mContext.externalCacheDir ?: mContext.cacheDir ?: return
+            dir.listFiles { f -> f.name.startsWith("cap_") && f.name.endsWith(".png") }
+                ?.forEach { runCatching { it.delete() } }
+        } catch (_: Exception) {
+        }
     }
 
     private fun captureFrame() {
@@ -139,8 +152,14 @@ class ScreencapEncoder(
                 }
                 
                 process = Runtime.getRuntime().exec(cmd)
-                process.waitFor()
-                
+                if (!process.waitFor(CAPTURE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                    Log.w(TAG, "screencap (file mode) timed out after ${CAPTURE_TIMEOUT_MS}ms")
+                    try { process.destroyForcibly() } catch (_: Exception) {}
+                    runCatching { file.delete() }
+                    mFailCount++
+                    return
+                }
+
                 if (file.exists() && file.length() > 0) {
                     val opts = BitmapFactory.Options().apply { inSampleSize = computeSampleSize() }
                     bitmap = BitmapFactory.decodeFile(file.absolutePath, opts)
@@ -155,9 +174,9 @@ class ScreencapEncoder(
                 // Stdout capture
                 val baseCmd = if (mUseRoot) "su -c screencap" else "screencap"
                 val cmd = if (mUseRawScreencap) baseCmd else "$baseCmd -p"
-                
+
                 process = Runtime.getRuntime().exec(cmd)
-                
+
                 val inputStream = process.inputStream
                 val buffer = ByteArrayOutputStream()
                 val temp = ByteArray(8192)
@@ -166,9 +185,14 @@ class ScreencapEncoder(
                     buffer.write(temp, 0, read)
                 }
                 val data = buffer.toByteArray()
-                
+
                 val err = process.errorStream.bufferedReader().use { it.readText() }
-                process.waitFor()
+                if (!process.waitFor(CAPTURE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                    Log.w(TAG, "screencap (stdout mode) timed out after ${CAPTURE_TIMEOUT_MS}ms")
+                    try { process.destroyForcibly() } catch (_: Exception) {}
+                    mFailCount++
+                    return
+                }
 
                 if (data.isNotEmpty()) {
                     val opts = BitmapFactory.Options().apply { inSampleSize = computeSampleSize() }
@@ -364,6 +388,7 @@ class ScreencapEncoder(
         private const val TAG = "ScreencapEncoder"
         private const val CLEAR_DELAY_MS = 100L
         private const val CLEAR_FRAMES = 5
+        private const val CAPTURE_TIMEOUT_MS = 2000L
 
         /**
          * Quick probe: check whether the screencap binary is accessible from this process.

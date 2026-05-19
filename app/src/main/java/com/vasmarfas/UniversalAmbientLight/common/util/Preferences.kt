@@ -4,10 +4,13 @@ import android.content.Context
 import android.content.res.Resources
 import androidx.preference.PreferenceManager
 import androidx.annotation.StringRes
+import java.util.concurrent.ConcurrentHashMap
+import androidx.core.content.edit
 
-/** Wrapper around SharedPreferences which allows for default values defined in Resources
- * Main purpose is that defaults are defined in a centralized location and that preferences are
- * accessed through a unified interface */
+/**
+ * Wrapper around SharedPreferences with defaults centralised in resources.
+ * Numeric prefs are stored as Strings to play nicely with EditTextPreference.
+ */
 class Preferences(context: Context) {
 
     private val preferences = PreferenceManager.getDefaultSharedPreferences(context)
@@ -16,72 +19,88 @@ class Preferences(context: Context) {
     fun contains(@StringRes keyResourceId: Int): Boolean = preferences.contains(key(keyResourceId))
 
     fun getString(@StringRes keyResourceId: Int, default: String? = null): String? {
-        return preferences.getString(key(keyResourceId), default)
+        return try {
+            preferences.getString(key(keyResourceId), default)
+        } catch (_: ClassCastException) {
+            // Value at this key was stored under a different type (legacy install).
+            default
+        }
     }
 
-    fun putString(@StringRes keyResourceId: Int, value: String){
-        val edit = preferences.edit()
-        edit.putString(key(keyResourceId), value)
-        edit.apply()
+    fun putString(@StringRes keyResourceId: Int, value: String) {
+        preferences.edit { putString(key(keyResourceId), value) }
     }
 
     fun getInt(@StringRes keyResourceId: Int): Int {
-        val default = defaultKey(keyResourceId, "integer").let {
-            if (it == 0){
-                0
-            } else {
-                try {
-                    resources.getInteger(it)
-                } catch (e: Resources.NotFoundException) {
-                    0
-                }
-            }
+        val defaultResId = defaultKey(keyResourceId, "integer")
+        val default = if (defaultResId == 0) 0 else try {
+            resources.getInteger(defaultResId)
+        } catch (_: Resources.NotFoundException) {
+            0
         }
-
         return getInt(keyResourceId, default)
     }
 
     fun getInt(@StringRes keyResourceId: Int, default: Int = 0): Int {
-        val raw = getString(keyResourceId)?.trim()
-        // Safely parse number: return default instead of crashing on empty/invalid string
+        val raw = try {
+            preferences.getString(key(keyResourceId), null)?.trim()
+        } catch (_: ClassCastException) {
+            // Value was stored directly as Int (e.g. via putInt on raw SharedPreferences elsewhere).
+            return try {
+                preferences.getInt(key(keyResourceId), default)
+            } catch (_: ClassCastException) {
+                default
+            }
+        }
         return raw?.toIntOrNull() ?: default
     }
 
-    fun putInt(@StringRes keyResourceId: Int, value: Int){
+    fun putInt(@StringRes keyResourceId: Int, value: Int) {
         putString(keyResourceId, value.toString())
     }
 
     fun getBoolean(@StringRes keyResourceId: Int): Boolean {
-        val default = defaultKey(keyResourceId, "bool").let {
-            if (it == 0){
-                false
-            } else {
-                try {
-                    resources.getBoolean(it)
-                } catch (e: Resources.NotFoundException) {
-                    false
-                }
-            }
+        val defaultResId = defaultKey(keyResourceId, "bool")
+        val default = if (defaultResId == 0) false else try {
+            resources.getBoolean(defaultResId)
+        } catch (_: Resources.NotFoundException) {
+            false
         }
-
-        return preferences.getBoolean(key(keyResourceId), default)
+        return getBoolean(keyResourceId, default)
     }
 
-    fun getBoolean(@StringRes keyResourceId: Int, default: Boolean): Boolean =
-        preferences.getBoolean(key(keyResourceId), default)
+    fun getBoolean(@StringRes keyResourceId: Int, default: Boolean): Boolean {
+        return try {
+            preferences.getBoolean(key(keyResourceId), default)
+        } catch (_: ClassCastException) {
+            default
+        }
+    }
 
-    fun putBoolean(@StringRes keyResourceId: Int, value: Boolean){
-        val edit = preferences.edit()
-        edit.putBoolean(key(keyResourceId), value)
-        edit.apply()
+    fun putBoolean(@StringRes keyResourceId: Int, value: Boolean) {
+        preferences.edit { putBoolean(key(keyResourceId), value) }
     }
 
     private fun key(keyResourceId: Int) = resources.getString(keyResourceId)
 
-    /** @return 0 if not found, resource id otherwise */
     private fun defaultKey(keyResourceId: Int, type: String): Int {
-        val defaultKeyName = resources.getResourceEntryName(keyResourceId).replace("pref_key_", "pref_default_")
-        return resources.getIdentifier(defaultKeyName, type, resources.getResourcePackageName(keyResourceId))
+        val cacheKey = (keyResourceId.toLong() shl 8) or typeTag(type).toLong()
+        sDefaultKeyCache[cacheKey]?.let { return it }
+
+        val name = resources.getResourceEntryName(keyResourceId).replace("pref_key_", "pref_default_")
+        val pkg = resources.getResourcePackageName(keyResourceId)
+        val resolved = resources.getIdentifier(name, type, pkg)
+        sDefaultKeyCache[cacheKey] = resolved
+        return resolved
     }
 
+    private fun typeTag(type: String): Int = when (type) {
+        "integer" -> 1
+        "bool" -> 2
+        else -> 0
+    }
+
+    companion object {
+        private val sDefaultKeyCache = ConcurrentHashMap<Long, Int>()
+    }
 }

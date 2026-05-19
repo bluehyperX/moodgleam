@@ -9,6 +9,7 @@ import com.vasmarfas.UniversalAmbientLight.common.util.AnalyticsHelper
 import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -61,28 +62,18 @@ class HyperionThread(
         override fun sendFrame(data: ByteArray, width: Int, height: Int) {
             val client = mClient.get()
             if (client == null || !client.isConnected()) return
-
-            // Если используется WLED или Adalight, сглаживание уже встроено внутри клиентов
-            if (client is WLEDClient || client is AdalightClient) {
-                mPendingFrame = FrameData(data, width, height)
-                val pending = mPendingTask
-                if (pending != null && !pending.isDone) {
-                    pending.cancel(false)
-                }
-                mPendingTask = mExecutor.submit { sendPendingFrame() }
-                return
-            }
-
-            // Для обычного Hyperion можно использовать локальное сглаживание, если нужно
-            // Но пока оставим прямую отправку для Hyperion протокола, так как сглаживание
-            // обычно делается на стороне сервера Hyperion.
+            if (mExecutor.isShutdown) return
 
             mPendingFrame = FrameData(data, width, height)
             val pending = mPendingTask
             if (pending != null && !pending.isDone) {
                 pending.cancel(false)
             }
-            mPendingTask = mExecutor.submit { sendPendingFrame() }
+            try {
+                mPendingTask = mExecutor.submit { sendPendingFrame() }
+            } catch (_: RejectedExecutionException) {
+                // Executor was shut down between the isShutdown check and submit (disconnect race).
+            }
         }
 
         private fun sendPendingFrame() {
@@ -194,14 +185,12 @@ class HyperionThread(
     }
 
     private fun connect() {
-        do {
+        while (!isInterrupted) {
             try {
                 val client = createClient()
-
                 if (client != null && client.isConnected()) {
                     mClient.set(client)
                     mConnected.set(true)
-                    // Логируем запуск конкретного протокола
                     AnalyticsHelper.logProtocolStarted(mContext, mConnectionType)
                     mCallback.onConnected()
                     Log.i(TAG, "Connected to $mConnectionType at $mHost:$mPort")
@@ -210,11 +199,10 @@ class HyperionThread(
             } catch (e: IOException) {
                 Log.e(TAG, "Connection failed: " + e.message)
                 mCallback.onConnectionError(e.hashCode(), e.message)
-                if (mReconnectEnabled.get() && mConnected.get()) {
-                    sleepSafe(mReconnectDelayMs)
-                }
             }
-        } while (mReconnectEnabled.get() && mConnected.get())
+            if (!mReconnectEnabled.get()) return
+            sleepSafe(mReconnectDelayMs)
+        }
     }
 
     @Throws(IOException::class)

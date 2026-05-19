@@ -132,16 +132,10 @@ class BootActivity : AppCompatActivity() {
         try {
             super.onResume()
         } catch (e: IllegalArgumentException) {
-            // On some firmware versions (seen on Amazon Fire TV / AFTBOXE1 Android 9)
-            // ActivityManagerService.isTopOfTask() throws IllegalArgumentException via
-            // Binder when the task is in an unexpected state.
-            // BootActivity is a no-history pass-through activity, so finishing is safe.
-            // However: super.onResume() threw BEFORE setting Activity.mCalled = true,
-            // so the framework's performResume() will subsequently throw
-            // SuperNotCalledException, crashing the process. Force-set mCalled via
-            // reflection so the framework's invariant check passes and the activity
-            // can finish cleanly.
-            Log.w(TAG, "onResume: super threw IllegalArgumentException, recovering: ${e.message}")
+            // Some firmware (Amazon Fire TV Android 9) throws IAE inside AMS.isTopOfTask
+            // before super.onResume sets mCalled, which would then trigger
+            // SuperNotCalledException. Patch mCalled via reflection and finish cleanly.
+            Log.w(TAG, "onResume: super threw IAE, recovering: ${e.message}")
             try {
                 val field = android.app.Activity::class.java.getDeclaredField("mCalled")
                 field.isAccessible = true

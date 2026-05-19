@@ -449,6 +449,7 @@ class ScreenEncoder(
         }
     }
 
+    @Synchronized
     private fun stopInternal(disconnect: Boolean) {
         if (DEBUG) Log.i(TAG, "Stopping (disconnect=$disconnect)")
         mRunning = false
@@ -514,8 +515,11 @@ class ScreenEncoder(
         }
     }
 
+    @Synchronized
     override fun setOrientation(orientation: Int) {
-        if (mVirtualDisplay == null || orientation == mCurrentOrientation) return
+        // Capture to a local so concurrent stopInternal() can't release between checks and use.
+        val virtualDisplay = mVirtualDisplay ?: return
+        if (orientation == mCurrentOrientation) return
 
         mCurrentOrientation = orientation
         mRunning = false
@@ -527,7 +531,13 @@ class ScreenEncoder(
 
         mCaptureHandler?.removeCallbacksAndMessages(null)
 
-        mVirtualDisplay!!.resize(mCaptureWidth, mCaptureHeight, mDensity)
+        try {
+            virtualDisplay.resize(mCaptureWidth, mCaptureHeight, mDensity)
+        } catch (e: IllegalStateException) {
+            // Already released — encoder is being torn down; abort the orientation flip.
+            Log.w(TAG, "setOrientation: VirtualDisplay released mid-flight: ${e.message}")
+            return
+        }
 
         if (mImageReader != null) {
             mImageReader!!.close()
@@ -539,7 +549,14 @@ class ScreenEncoder(
             IMAGE_READER_IMAGES
         )
 
-        mVirtualDisplay!!.surface = mImageReader!!.surface
+        try {
+            virtualDisplay.surface = mImageReader!!.surface
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "setOrientation: surface assignment failed: ${e.message}")
+            mImageReader?.close()
+            mImageReader = null
+            return
+        }
 
         mRgbBuffer = null
         mRowBuffer = null

@@ -56,7 +56,13 @@ class MtkThalCaptureEncoder(
 
     init {
         calculateCaptureDimensions()
-        startCapture()
+        // Defer slow work (APK extraction, su exec) to the worker so the constructor
+        // — called from ScreenGrabberService on the main thread — returns immediately.
+        mThread = HandlerThread(TAG, Process.THREAD_PRIORITY_BACKGROUND).apply { start() }
+        mHandler = Handler(mThread!!.looper)
+        mRunning = true
+        mCapturing = true
+        mHandler!!.post { startCaptureOnWorker() }
     }
 
     private fun calculateCaptureDimensions() {
@@ -123,17 +129,21 @@ class MtkThalCaptureEncoder(
         }
     }
 
-    private fun startCapture() {
+    private fun startCaptureOnWorker() {
         val binary = extractBinary()
         if (binary == null) {
+            mCapturing = false
+            mRunning = false
             onFatalError?.invoke("MTK THAL Capture: binary not found")
             return
         }
 
-        // Ensure DMA heap is accessible
         try {
-            Runtime.getRuntime().exec(arrayOf("su", "-c",
-                "chmod 666 $DMA_HEAP_PATH")).waitFor()
+            val chmod = Runtime.getRuntime().exec(arrayOf("su", "-c", "chmod 666 $DMA_HEAP_PATH"))
+            if (!chmod.waitFor(CHMOD_TIMEOUT_SEC, TimeUnit.SECONDS)) {
+                try { chmod.destroyForcibly() } catch (_: Exception) {}
+                Log.w(TAG, "chmod dma_heap timed out")
+            }
         } catch (e: Exception) {
             Log.w(TAG, "chmod dma_heap failed", e)
         }
@@ -148,16 +158,24 @@ class MtkThalCaptureEncoder(
             Log.i(TAG, "Started capture: ${mCaptureWidth}x${mCaptureHeight} @ ${fps}fps")
         } catch (e: IOException) {
             Log.e(TAG, "Failed to start capture process", e)
+            mCapturing = false
+            mRunning = false
             onFatalError?.invoke("MTK THAL Capture: failed to start process")
             return
         }
 
-        mThread = HandlerThread(TAG, Process.THREAD_PRIORITY_BACKGROUND)
-        mThread!!.start()
-        mHandler = Handler(mThread!!.looper)
-        mRunning = true
-        mCapturing = true
-        mHandler!!.post { readFrameLoop() }
+        if (!mRunning) {
+            // stopRecording fired before the process launched.
+            try { mProcess?.destroy() } catch (_: Exception) {}
+            mProcess = null
+            return
+        }
+        readFrameLoop()
+    }
+
+    private fun restartCaptureOnWorker() {
+        if (mProcess != null) return
+        startCaptureOnWorker()
     }
 
     companion object {
@@ -169,18 +187,14 @@ class MtkThalCaptureEncoder(
         private const val THAL_LIB_PATH = "/vendor/lib/libthal_capture.so"
         private const val STATUS_MAGIC = 0x4D544B53 // "MTKS"
         private const val AVAILABILITY_CHECK_TIMEOUT_SEC = 3L
+        private const val CHMOD_TIMEOUT_SEC = 2L
 
         @Volatile private var sCachedAvailable: Boolean? = null
         private val sCheckInProgress = AtomicBoolean(false)
 
         /**
-         * Returns whether MTK THAL capture is available on this device.
-         *
-         * NEVER blocks the caller: the first call kicks off a `su -c` probe on a
-         * background daemon thread and returns `false`. The cached result becomes
-         * available on subsequent calls. This avoids the ANR that the old
-         * blocking implementation caused when invoked from Compose/main thread
-         * (SettingsScreen reads this during recomposition).
+         * Never blocks the caller. First call probes `su` on a daemon thread and
+         * returns false; subsequent calls return the cached result.
          */
         fun isAvailable(): Boolean {
             sCachedAvailable?.let { return it }
@@ -313,9 +327,14 @@ class MtkThalCaptureEncoder(
     }
 
     fun resumeRecording() {
-        if (!mRunning) {
-            startCapture()
+        if (mRunning) return
+        if (mHandler == null) {
+            mThread = HandlerThread(TAG, Process.THREAD_PRIORITY_BACKGROUND).apply { start() }
+            mHandler = Handler(mThread!!.looper)
         }
+        mRunning = true
+        mCapturing = true
+        mHandler!!.post { restartCaptureOnWorker() }
     }
 
     @Suppress("UNUSED_PARAMETER")

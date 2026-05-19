@@ -49,6 +49,10 @@ class WLEDClient(
 
     // KeepAlive
     private val mKeepAliveExecutor = Executors.newSingleThreadScheduledExecutor()
+    private val mResumeExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "WLEDClient-resume").apply { isDaemon = true }
+    }
+    @Volatile
     private var mLastLeds: Array<ColorRgb>? = null
     private val mLastReconnectAttemptMs = AtomicLong(0L)
     private val mBlockedUntilMs = AtomicLong(0L)
@@ -144,44 +148,39 @@ class WLEDClient(
     fun resetBlocked() {
         val wasBlocked = mBlockedUntilMs.get() > System.currentTimeMillis()
         mBlockedUntilMs.set(0L)
-        
+
         if (logsEnabled) {
             Log.d(TAG, "resetBlocked: wasBlocked=$wasBlocked, connection=${isConnected()}, mLastLeds=${mLastLeds != null}")
         }
-        
-        if (isConnected() && wasBlocked && mLastLeds != null) {
-            val lastLedsCopy = Array(mLastLeds!!.size) { i -> mLastLeds!![i].clone() }
-            Thread {
-                try {
-                    if (logsEnabled) Log.d(TAG, "Immediately resending last frame after unblock (${lastLedsCopy.size} LEDs)")
-                    sendLedData(lastLedsCopy)
-                } catch (e: Exception) {
-                    if (logsEnabled) Log.w(TAG, "Error sending frame after unblock", e)
-                }
-            }.start()
-        }
-        
+
         val hadConnection = isConnected()
-        val lastLedsCopy = mLastLeds?.let { Array(it.size) { i -> it[i].clone() } }
-        
-        Thread {
-            try {
-                if (!hadConnection) {
-                    if (logsEnabled) Log.d(TAG, "Connection lost, attempting reconnect after screen on")
-                    reconnectIfNeeded()
-                    if (isConnected() && lastLedsCopy != null) {
-                        if (logsEnabled) Log.d(TAG, "Reconnected successfully, restoring frame")
-                        mSmoothing.setTargetColors(lastLedsCopy)
-                        sendLedData(lastLedsCopy)
+        // Snapshot once — mLastLeds is @Volatile so the read is safe; the copy
+        // protects us from concurrent mutation by sendLedData on another thread.
+        val snapshot = mLastLeds?.let { Array(it.size) { i -> it[i].clone() } }
+
+        if (mResumeExecutor.isShutdown) return
+        try {
+            mResumeExecutor.submit {
+                try {
+                    if (hadConnection && wasBlocked && snapshot != null) {
+                        sendLedData(snapshot)
                     }
-                } else if (wasBlocked && lastLedsCopy != null) {
-                    if (logsEnabled) Log.d(TAG, "Restoring last frame in ColorSmoothing after unblock")
-                    mSmoothing.setTargetColors(lastLedsCopy)
+                    if (!hadConnection) {
+                        reconnectIfNeeded()
+                        if (isConnected() && snapshot != null) {
+                            mSmoothing.setTargetColors(snapshot)
+                            sendLedData(snapshot)
+                        }
+                    } else if (wasBlocked && snapshot != null) {
+                        mSmoothing.setTargetColors(snapshot)
+                    }
+                } catch (e: Exception) {
+                    if (logsEnabled) Log.w(TAG, "resetBlocked task failed", e)
                 }
-            } catch (e: Exception) {
-                if (logsEnabled) Log.w(TAG, "Error in resetBlocked background thread", e)
             }
-        }.start()
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            // Disconnect happened concurrently — fine, nothing to resume.
+        }
     }
 
     @Throws(IOException::class)
@@ -189,6 +188,7 @@ class WLEDClient(
         mConnected = false
         mSmoothing.stop()
         mKeepAliveExecutor.shutdownNow()
+        mResumeExecutor.shutdownNow()
         if (mSocket != null && !mSocket!!.isClosed) {
             mSocket!!.close()
             mSocket = null
@@ -243,7 +243,8 @@ class WLEDClient(
 
     private fun sendLedData(leds: Array<ColorRgb>) {
         if (!isConnected()) return
-        mLastLeds = leds // Save for keepalive
+        // Volatile reference — keepalive sees either the previous or the new array.
+        mLastLeds = leds
 
         // On some Android TV firmware cuts UDP sending (sendto EPERM) during SCREEN_OFF.
         // Don't try sending every iteration to avoid log spam and CPU waste.

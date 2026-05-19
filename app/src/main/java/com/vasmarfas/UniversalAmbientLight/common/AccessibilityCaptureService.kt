@@ -38,22 +38,21 @@ class AccessibilityCaptureService : AccessibilityService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             takeScreenshot(0, mainExecutor, object : TakeScreenshotCallback {
                 override fun onSuccess(screenshot: ScreenshotResult) {
+                    var copy: Bitmap? = null
                     try {
                         val bitmap = Bitmap.wrapHardwareBuffer(
                             screenshot.hardwareBuffer,
                             screenshot.colorSpace
                         )
-                        // Copy bitmap because HardwareBuffer must be closed and is not always software-readable
-                        val copy = bitmap?.copy(Bitmap.Config.ARGB_8888, true)
-                        
-                        screenshot.hardwareBuffer.close()
-                        bitmap?.recycle()
-                        
-                        callback(copy)
+                        // Copy to a software-readable bitmap. wrapHardwareBuffer-backed
+                        // bitmaps must not be recycled — closing the buffer is enough.
+                        copy = bitmap?.copy(Bitmap.Config.ARGB_8888, true)
                     } catch (e: Exception) {
                         Log.e(TAG, "Screenshot conversion failed", e)
-                        callback(null)
+                    } finally {
+                        try { screenshot.hardwareBuffer.close() } catch (_: Exception) {}
                     }
+                    callback(copy)
                 }
 
                 override fun onFailure(errorCode: Int) {

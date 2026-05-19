@@ -10,9 +10,13 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 object TclBypass {
     private const val TAG = "TclBypass"
+    private const val SHELL_CMD_TIMEOUT_SEC = 2L
+    private val sBypassInFlight = AtomicBoolean(false)
 
     fun isTclDevice(): Boolean {
         val manufacturer = Build.MANUFACTURER.lowercase()
@@ -133,38 +137,48 @@ object TclBypass {
     }
 
     fun tryShellBypass(context: Context) {
-        Thread {
-            val pkg = context.packageName
-            val commands = arrayOf(
-                "appops set $pkg PROJECT_MEDIA allow",
-                "appops set $pkg android:project_media allow",
-                "appops set $pkg SYSTEM_ALERT_WINDOW allow",
-                "settings put global auto_start_$pkg 1",
-                "settings put secure auto_start_$pkg 1",
-                "am broadcast -a com.tcl.action.ALLOW_AUTO_START -e package $pkg",
-                "am broadcast -a com.tcl.appboot.action.SET_ALLOW -e package $pkg",
-                "settings put global tcl_app_boot_$pkg allow",
-                "settings put secure tcl_app_boot_$pkg allow",
-                "cmd deviceidle whitelist +$pkg",
-                "dumpsys deviceidle whitelist +$pkg",
-                "appops set $pkg RUN_IN_BACKGROUND allow",
-                "appops set $pkg RUN_ANY_IN_BACKGROUND allow",
-                "appops set $pkg START_FOREGROUND allow",
-                "appops set $pkg INSTANT_APP_START_FOREGROUND allow"
-            )
+        // Dedupe — multiple service restarts on TCL devices used to pile up parallel
+        // shell-bypass threads, each forking 15 sh processes.
+        if (!sBypassInFlight.compareAndSet(false, true)) return
 
-            for (cmd in commands) {
-                try {
-                    val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
-                    process.waitFor()
-                    val exit = process.exitValue()
-                    if (exit == 0) {
-                        Log.d(TAG, "Success: $cmd")
+        Thread {
+            try {
+                val pkg = context.packageName
+                val commands = arrayOf(
+                    "appops set $pkg PROJECT_MEDIA allow",
+                    "appops set $pkg android:project_media allow",
+                    "appops set $pkg SYSTEM_ALERT_WINDOW allow",
+                    "settings put global auto_start_$pkg 1",
+                    "settings put secure auto_start_$pkg 1",
+                    "am broadcast -a com.tcl.action.ALLOW_AUTO_START -e package $pkg",
+                    "am broadcast -a com.tcl.appboot.action.SET_ALLOW -e package $pkg",
+                    "settings put global tcl_app_boot_$pkg allow",
+                    "settings put secure tcl_app_boot_$pkg allow",
+                    "cmd deviceidle whitelist +$pkg",
+                    "dumpsys deviceidle whitelist +$pkg",
+                    "appops set $pkg RUN_IN_BACKGROUND allow",
+                    "appops set $pkg RUN_ANY_IN_BACKGROUND allow",
+                    "appops set $pkg START_FOREGROUND allow",
+                    "appops set $pkg INSTANT_APP_START_FOREGROUND allow"
+                )
+
+                for (cmd in commands) {
+                    var process: java.lang.Process? = null
+                    try {
+                        process = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+                        if (!process.waitFor(SHELL_CMD_TIMEOUT_SEC, TimeUnit.SECONDS)) {
+                            try { process.destroyForcibly() } catch (_: Exception) {}
+                            continue
+                        }
+                        if (process.exitValue() == 0) Log.d(TAG, "Success: $cmd")
+                    } catch (_: Exception) {
+                        try { process?.destroyForcibly() } catch (_: Exception) {}
                     }
-                } catch (e: Exception) {
                 }
+            } finally {
+                sBypassInFlight.set(false)
             }
-        }.start()
+        }.apply { isDaemon = true; name = "TclShellBypass" }.start()
     }
 
     fun showTclHelpDialog(activity: Activity, onRetry: Runnable?) {
