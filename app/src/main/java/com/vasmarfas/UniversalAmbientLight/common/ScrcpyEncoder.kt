@@ -554,7 +554,9 @@ class ScrcpyEncoder(
             val (ro, go, bo) = ColorProcessor.processColor(
                 (rSum / cnt).toInt(), (gSum / cnt).toInt(), (bSum / cnt).toInt(),
                 mOptions.brightness, mOptions.contrast,
-                mOptions.blackLevel, mOptions.whiteLevel, mOptions.saturation
+                mOptions.blackLevel, mOptions.whiteLevel, mOptions.saturation,
+                mOptions.brightnessR, mOptions.brightnessG, mOptions.brightnessB,
+                mOptions.gammaR, mOptions.gammaG, mOptions.gammaB
             )
             mListener.sendFrame(byteArrayOf(ro.toByte(), go.toByte(), bo.toByte()), 1, 1)
         }

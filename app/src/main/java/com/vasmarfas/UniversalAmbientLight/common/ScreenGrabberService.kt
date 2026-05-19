@@ -64,6 +64,11 @@ class ScreenGrabberService : Service() {
     private var mProjectionResultCode: Int? = null
     private var mProjectionDataExtras: android.os.Bundle? = null
 
+    // Holds the AppOptions handed to the active encoder, so color-pref edits made
+    // mid-capture can push new values into it without restarting the session.
+    @Volatile private var mActiveOptions: AppOptions? = null
+    private var mPrefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+
     private val mReceiver = object : HyperionThreadBroadcaster {
         override fun onConnected() {
             if (DEBUG) Log.d(TAG, "Connected to Hyperion server")
@@ -424,6 +429,9 @@ class ScreenGrabberService : Service() {
             if (DEBUG) Log.v(TAG, "Wake receiver not registered")
         }
 
+        unregisterColorPrefsListener()
+        mActiveOptions = null
+
         releaseWakeLock()
         stopAllCapture()
         stopForeground(true)
@@ -595,15 +603,7 @@ class ScreenGrabberService : Service() {
         }
 
         val prefs = Preferences(this)
-        val options = AppOptions(
-            mHorizontalLEDCount, mVerticalLEDCount, mFrameRate, mSendAverageColor, mCaptureQuality,
-            brightness = prefs.getInt(R.string.pref_key_color_brightness, 100),
-            contrast = prefs.getInt(R.string.pref_key_color_contrast, 100),
-            blackLevel = prefs.getInt(R.string.pref_key_color_black_level, 0),
-            whiteLevel = prefs.getInt(R.string.pref_key_color_white_level, 100),
-            saturation = prefs.getInt(R.string.pref_key_color_saturation, 100),
-            colorProcessingEnabled = prefs.getBoolean(R.string.pref_key_color_processing_enabled, true)
-        )
+        val options = buildAppOptions(prefs)
 
         val cornersStr = prefs.getString(R.string.pref_key_camera_corners, null)
         val corners = CameraEncoder.parseCornersString(cornersStr)
@@ -774,15 +774,7 @@ class ScreenGrabberService : Service() {
             window.defaultDisplay.getRealMetrics(metrics)
 
             val prefs = Preferences(this)
-            val options = AppOptions(
-                mHorizontalLEDCount, mVerticalLEDCount, mFrameRate, mSendAverageColor, mCaptureQuality,
-                brightness = prefs.getInt(R.string.pref_key_color_brightness, 100),
-                contrast = prefs.getInt(R.string.pref_key_color_contrast, 100),
-                blackLevel = prefs.getInt(R.string.pref_key_color_black_level, 0),
-                whiteLevel = prefs.getInt(R.string.pref_key_color_white_level, 100),
-                saturation = prefs.getInt(R.string.pref_key_color_saturation, 100),
-                colorProcessingEnabled = prefs.getBoolean(R.string.pref_key_color_processing_enabled, true)
-            )
+            val options = buildAppOptions(prefs)
 
             if (DEBUG) Log.v(TAG, "Creating encoder: " + metrics.widthPixels + "x" + metrics.heightPixels)
             mScreenEncoder = ScreenEncoder(
@@ -820,15 +812,7 @@ class ScreenGrabberService : Service() {
         window.defaultDisplay.getRealMetrics(metrics)
 
         val prefs = Preferences(this)
-        val options = AppOptions(
-            mHorizontalLEDCount, mVerticalLEDCount, mFrameRate, mSendAverageColor, mCaptureQuality,
-            brightness = prefs.getInt(R.string.pref_key_color_brightness, 100),
-            contrast = prefs.getInt(R.string.pref_key_color_contrast, 100),
-            blackLevel = prefs.getInt(R.string.pref_key_color_black_level, 0),
-            whiteLevel = prefs.getInt(R.string.pref_key_color_white_level, 100),
-            saturation = prefs.getInt(R.string.pref_key_color_saturation, 100),
-            colorProcessingEnabled = prefs.getBoolean(R.string.pref_key_color_processing_enabled, true)
-        )
+        val options = buildAppOptions(prefs)
 
         if (method == "accessibility") {
             val accessibilityService = AccessibilityCaptureService.getInstance()
@@ -985,15 +969,7 @@ class ScreenGrabberService : Service() {
             window.defaultDisplay.getRealMetrics(metrics)
 
             val prefs = Preferences(this)
-            val options = AppOptions(
-                mHorizontalLEDCount, mVerticalLEDCount, mFrameRate, mSendAverageColor, mCaptureQuality,
-                brightness = prefs.getInt(R.string.pref_key_color_brightness, 100),
-                contrast = prefs.getInt(R.string.pref_key_color_contrast, 100),
-                blackLevel = prefs.getInt(R.string.pref_key_color_black_level, 0),
-                whiteLevel = prefs.getInt(R.string.pref_key_color_white_level, 100),
-                saturation = prefs.getInt(R.string.pref_key_color_saturation, 100),
-                colorProcessingEnabled = prefs.getBoolean(R.string.pref_key_color_processing_enabled, true)
-            )
+            val options = buildAppOptions(prefs)
 
             mScreenEncoder = ScreenEncoder(
                 mHyperionThread!!.receiver,
@@ -1108,6 +1084,65 @@ class ScreenGrabberService : Service() {
             )
         }
         LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
+    }
+
+    private fun buildAppOptions(prefs: Preferences): AppOptions {
+        val opts = AppOptions(
+            mHorizontalLEDCount, mVerticalLEDCount, mFrameRate, mSendAverageColor, mCaptureQuality,
+            brightness = prefs.getInt(R.string.pref_key_color_brightness, 100),
+            contrast = prefs.getInt(R.string.pref_key_color_contrast, 100),
+            blackLevel = prefs.getInt(R.string.pref_key_color_black_level, 0),
+            whiteLevel = prefs.getInt(R.string.pref_key_color_white_level, 100),
+            saturation = prefs.getInt(R.string.pref_key_color_saturation, 100),
+            colorProcessingEnabled = prefs.getBoolean(R.string.pref_key_color_processing_enabled, true),
+            brightnessR = prefs.getInt(R.string.pref_key_color_brightness_r, 100),
+            brightnessG = prefs.getInt(R.string.pref_key_color_brightness_g, 100),
+            brightnessB = prefs.getInt(R.string.pref_key_color_brightness_b, 100),
+            gammaR = prefs.getInt(R.string.pref_key_color_gamma_r, 100),
+            gammaG = prefs.getInt(R.string.pref_key_color_gamma_g, 100),
+            gammaB = prefs.getInt(R.string.pref_key_color_gamma_b, 100)
+        )
+        mActiveOptions = opts
+        registerColorPrefsListener()
+        return opts
+    }
+
+    private fun registerColorPrefsListener() {
+        if (mPrefsListener != null) return
+        val sharedPrefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val keyBrightness = getString(R.string.pref_key_color_brightness)
+        val keyContrast = getString(R.string.pref_key_color_contrast)
+        val keyBlack = getString(R.string.pref_key_color_black_level)
+        val keyWhite = getString(R.string.pref_key_color_white_level)
+        val keySaturation = getString(R.string.pref_key_color_saturation)
+        val keyEnabled = getString(R.string.pref_key_color_processing_enabled)
+        val keyBr = getString(R.string.pref_key_color_brightness_r)
+        val keyBg = getString(R.string.pref_key_color_brightness_g)
+        val keyBb = getString(R.string.pref_key_color_brightness_b)
+        val keyGr = getString(R.string.pref_key_color_gamma_r)
+        val keyGg = getString(R.string.pref_key_color_gamma_g)
+        val keyGb = getString(R.string.pref_key_color_gamma_b)
+        val colorKeys = setOf(
+            keyBrightness, keyContrast, keyBlack, keyWhite, keySaturation, keyEnabled,
+            keyBr, keyBg, keyBb, keyGr, keyGg, keyGb
+        )
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key != null && key in colorKeys) {
+                mActiveOptions?.refreshColorSettings(Preferences(this))
+            }
+        }
+        sharedPrefs.registerOnSharedPreferenceChangeListener(listener)
+        mPrefsListener = listener
+    }
+
+    private fun unregisterColorPrefsListener() {
+        val listener = mPrefsListener ?: return
+        try {
+            androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+                .unregisterOnSharedPreferenceChangeListener(listener)
+        } catch (_: Exception) {
+        }
+        mPrefsListener = null
     }
 
     interface HyperionThreadBroadcaster {

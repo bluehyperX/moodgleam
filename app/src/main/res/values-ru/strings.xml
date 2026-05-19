@@ -206,6 +206,17 @@
   <string name="pref_summary_color_saturation">Насыщенность цветов (0–200%)</string>
   <string name="pref_title_color_processing_enabled">Обработка цвета</string>
   <string name="pref_summary_color_processing_enabled">Включить настройку яркости, контрастности и насыщенности (может влиять на производительность)</string>
+  <string name="pref_group_color_per_channel">Поканальная коррекция (R/G/B)</string>
+  <string name="pref_title_color_brightness_r">Яркость R</string>
+  <string name="pref_title_color_brightness_g">Яркость G</string>
+  <string name="pref_title_color_brightness_b">Яркость B</string>
+  <string name="pref_summary_color_brightness_channel">Множитель яркости канала (0–200%, 100 — без изменений)</string>
+  <string name="pref_title_color_gamma_r">Гамма R</string>
+  <string name="pref_title_color_gamma_g">Гамма G</string>
+  <string name="pref_title_color_gamma_b">Гамма B</string>
+  <string name="pref_summary_color_gamma_channel">Гамма-кривая канала (50–300%, 100 — линейная)</string>
+  <string name="pref_color_preview_title">Превью (с применением обработки)</string>
+  <string name="pref_color_preview_hint">Отражает то, что будет отправлено на LED-ленту. Анимации на главном экране НЕ используют эти настройки.</string>
   <string name="battery_optimization_prompt">Чтобы захват/подсветка стабильнее работали в фоне (особенно на TV), рекомендуем отключить оптимизацию батареи для приложения.</string>
   <string-array name="pref_list_capture_quality">
     <item>Низкое (64px)</item>

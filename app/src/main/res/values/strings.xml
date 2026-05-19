@@ -205,6 +205,17 @@
   <string name="pref_summary_color_saturation">Color saturation adjustment (0-200%)</string>
   <string name="pref_title_color_processing_enabled">Color Processing</string>
   <string name="pref_summary_color_processing_enabled">Enable brightness, contrast, and saturation adjustments (may affect performance)</string>
+  <string name="pref_group_color_per_channel">Per-channel correction (R/G/B)</string>
+  <string name="pref_title_color_brightness_r">Red brightness</string>
+  <string name="pref_title_color_brightness_g">Green brightness</string>
+  <string name="pref_title_color_brightness_b">Blue brightness</string>
+  <string name="pref_summary_color_brightness_channel">Channel brightness multiplier (0-200%, 100 = no change)</string>
+  <string name="pref_title_color_gamma_r">Red gamma</string>
+  <string name="pref_title_color_gamma_g">Green gamma</string>
+  <string name="pref_title_color_gamma_b">Blue gamma</string>
+  <string name="pref_summary_color_gamma_channel">Gamma curve for the channel (50-300%, 100 = linear)</string>
+  <string name="pref_color_preview_title">Preview (after color processing)</string>
+  <string name="pref_color_preview_hint">Reflects what will be sent to the LED strip. The animations on the Home screen do NOT use these settings.</string>
   <string name="battery_optimization_prompt">Чтобы захват/подсветка стабильнее работали в фоне (особенно на TV), рекомендуем отключить оптимизацию батареи для приложения.</string>
   <string-array name="pref_list_capture_quality">
     <item>Low (64px)</item>

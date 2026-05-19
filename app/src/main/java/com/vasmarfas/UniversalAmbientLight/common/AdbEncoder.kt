@@ -277,7 +277,9 @@ class AdbEncoder(
             val (rOut, gOut, bOut) = ColorProcessor.processColor(
                 (r / count).toInt(), (g / count).toInt(), (b / count).toInt(),
                 mOptions.brightness, mOptions.contrast,
-                mOptions.blackLevel, mOptions.whiteLevel, mOptions.saturation
+                mOptions.blackLevel, mOptions.whiteLevel, mOptions.saturation,
+                mOptions.brightnessR, mOptions.brightnessG, mOptions.brightnessB,
+                mOptions.gammaR, mOptions.gammaG, mOptions.gammaB
             )
             mListener.sendFrame(byteArrayOf(rOut.toByte(), gOut.toByte(), bOut.toByte()), 1, 1)
         }

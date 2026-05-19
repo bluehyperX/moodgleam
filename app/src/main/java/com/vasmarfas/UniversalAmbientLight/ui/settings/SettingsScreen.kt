@@ -10,12 +10,15 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.runtime.DisposableEffect
@@ -28,6 +31,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import com.vasmarfas.UniversalAmbientLight.R
 import com.vasmarfas.UniversalAmbientLight.common.MtkThalCaptureEncoder
+import com.vasmarfas.UniversalAmbientLight.common.util.ColorProcessor
 import com.vasmarfas.UniversalAmbientLight.common.util.Preferences
 import com.vasmarfas.UniversalAmbientLight.common.util.LocaleHelper
 import com.vasmarfas.UniversalAmbientLight.common.util.AnalyticsHelper
@@ -439,6 +443,9 @@ fun SettingsScreen(
                 )
 
                 if (colorProcessingEnabled) {
+                    // Bumped on every per-channel/global color pref change; drives the live preview below.
+                    var colorPrefsVersion by remember { mutableIntStateOf(0) }
+
                     EditTextPreference(
                         prefs = prefs,
                         keyRes = R.string.pref_key_color_brightness,
@@ -446,7 +453,7 @@ fun SettingsScreen(
                         summaryProvider = { "${it}%" },
                         keyboardType = KeyboardType.Number,
                         onValueChange = { newValue ->
-                            val valueInt = newValue.toIntOrNull() ?: 100
+                            colorPrefsVersion++
                             AnalyticsHelper.logSettingChanged(context, "color_brightness", newValue)
                         }
                     )
@@ -457,7 +464,7 @@ fun SettingsScreen(
                         summaryProvider = { "${it}%" },
                         keyboardType = KeyboardType.Number,
                         onValueChange = { newValue ->
-                            val valueInt = newValue.toIntOrNull() ?: 100
+                            colorPrefsVersion++
                             AnalyticsHelper.logSettingChanged(context, "color_contrast", newValue)
                         }
                     )
@@ -468,7 +475,7 @@ fun SettingsScreen(
                         summaryProvider = { "${it}%" },
                         keyboardType = KeyboardType.Number,
                         onValueChange = { newValue ->
-                            val valueInt = newValue.toIntOrNull() ?: 0
+                            colorPrefsVersion++
                             AnalyticsHelper.logSettingChanged(context, "color_black_level", newValue)
                         }
                     )
@@ -479,7 +486,7 @@ fun SettingsScreen(
                         summaryProvider = { "${it}%" },
                         keyboardType = KeyboardType.Number,
                         onValueChange = { newValue ->
-                            val valueInt = newValue.toIntOrNull() ?: 100
+                            colorPrefsVersion++
                             AnalyticsHelper.logSettingChanged(context, "color_white_level", newValue)
                         }
                     )
@@ -490,10 +497,62 @@ fun SettingsScreen(
                         summaryProvider = { "${it}%" },
                         keyboardType = KeyboardType.Number,
                         onValueChange = { newValue ->
-                            val valueInt = newValue.toIntOrNull() ?: 100
+                            colorPrefsVersion++
                             AnalyticsHelper.logSettingChanged(context, "color_saturation", newValue)
                         }
                     )
+
+                    // Per-channel correction subsection (issue #21).
+                    Text(
+                        text = stringResource(R.string.pref_group_color_per_channel),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
+                    )
+                    listOf(
+                        R.string.pref_key_color_brightness_r to R.string.pref_title_color_brightness_r,
+                        R.string.pref_key_color_brightness_g to R.string.pref_title_color_brightness_g,
+                        R.string.pref_key_color_brightness_b to R.string.pref_title_color_brightness_b
+                    ).forEach { (keyRes, titleRes) ->
+                        EditTextPreference(
+                            prefs = prefs,
+                            keyRes = keyRes,
+                            title = stringResource(titleRes),
+                            summaryProvider = { "${it}%" },
+                            keyboardType = KeyboardType.Number,
+                            onValueChange = { newValue ->
+                                colorPrefsVersion++
+                                AnalyticsHelper.logSettingChanged(
+                                    context,
+                                    context.getString(keyRes),
+                                    newValue
+                                )
+                            }
+                        )
+                    }
+                    listOf(
+                        R.string.pref_key_color_gamma_r to R.string.pref_title_color_gamma_r,
+                        R.string.pref_key_color_gamma_g to R.string.pref_title_color_gamma_g,
+                        R.string.pref_key_color_gamma_b to R.string.pref_title_color_gamma_b
+                    ).forEach { (keyRes, titleRes) ->
+                        EditTextPreference(
+                            prefs = prefs,
+                            keyRes = keyRes,
+                            title = stringResource(titleRes),
+                            summaryProvider = { "${it}%" },
+                            keyboardType = KeyboardType.Number,
+                            onValueChange = { newValue ->
+                                colorPrefsVersion++
+                                AnalyticsHelper.logSettingChanged(
+                                    context,
+                                    context.getString(keyRes),
+                                    newValue
+                                )
+                            }
+                        )
+                    }
+
+                    ColorProcessingPreview(prefs = prefs, version = colorPrefsVersion)
                 }
             }
 
@@ -736,6 +795,77 @@ fun SettingsScreen(
             context = context,
             prefs = prefs,
             onDismiss = { showAdbPairingDialog = false }
+        )
+    }
+}
+
+/**
+ * Live preview of the color-processing pipeline.
+ * Reads all relevant prefs each time [version] changes (incremented by the
+ * surrounding EditTextPreference fields) and renders three pure R/G/B swatches
+ * plus a grayscale gradient, all after [ColorProcessor.processColor].
+ */
+@Composable
+private fun ColorProcessingPreview(prefs: Preferences, version: Int) {
+    val preview = remember(version) {
+        val brightness = prefs.getInt(R.string.pref_key_color_brightness, 100)
+        val contrast = prefs.getInt(R.string.pref_key_color_contrast, 100)
+        val blackLevel = prefs.getInt(R.string.pref_key_color_black_level, 0)
+        val whiteLevel = prefs.getInt(R.string.pref_key_color_white_level, 100)
+        val saturation = prefs.getInt(R.string.pref_key_color_saturation, 100)
+        val bR = prefs.getInt(R.string.pref_key_color_brightness_r, 100)
+        val bG = prefs.getInt(R.string.pref_key_color_brightness_g, 100)
+        val bB = prefs.getInt(R.string.pref_key_color_brightness_b, 100)
+        val gR = prefs.getInt(R.string.pref_key_color_gamma_r, 100)
+        val gG = prefs.getInt(R.string.pref_key_color_gamma_g, 100)
+        val gB = prefs.getInt(R.string.pref_key_color_gamma_b, 100)
+
+        val process: (Int, Int, Int) -> Color = { r, g, b ->
+            val (ro, go, bo) = ColorProcessor.processColor(
+                r, g, b,
+                brightness, contrast, blackLevel, whiteLevel, saturation,
+                bR, bG, bB, gR, gG, gB
+            )
+            Color(ro, go, bo)
+        }
+        Triple(
+            process(255, 0, 0),
+            process(0, 255, 0),
+            process(0, 0, 255)
+        ) to (0..8).map { step -> process(step * 32, step * 32, step * 32) }
+    }
+    val swatches = preview.first
+    val ramp = preview.second
+
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            text = stringResource(R.string.pref_color_preview_title),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(modifier = Modifier.weight(1f).fillMaxHeight().background(swatches.first))
+            Box(modifier = Modifier.weight(1f).fillMaxHeight().background(swatches.second))
+            Box(modifier = Modifier.weight(1f).fillMaxHeight().background(swatches.third))
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(20.dp)
+                .background(Brush.horizontalGradient(ramp))
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = stringResource(R.string.pref_color_preview_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

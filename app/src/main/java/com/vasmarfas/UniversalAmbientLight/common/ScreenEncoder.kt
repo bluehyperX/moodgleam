@@ -436,7 +436,9 @@ class ScreenEncoder(
                 mOptions.contrast,
                 mOptions.blackLevel,
                 mOptions.whiteLevel,
-                mOptions.saturation
+                mOptions.saturation,
+                mOptions.brightnessR, mOptions.brightnessG, mOptions.brightnessB,
+                mOptions.gammaR, mOptions.gammaG, mOptions.gammaB
             )
             
             mAvgColorResult[0] = rOut.toByte()

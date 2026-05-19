@@ -9,13 +9,38 @@ class AppOptions(
     val frameRate: Int,
     val useAverageColor: Boolean,
     val captureQuality: Int,
-    val brightness: Int = 100, // Яркость в процентах [0-200]
-    val contrast: Int = 100, // Контрастность в процентах [0-200]
-    val blackLevel: Int = 0, // Уровень черного в процентах [0-100], значения ниже этого будут обрезаны
-    val whiteLevel: Int = 100, // Уровень белого в процентах [0-100], значения выше этого будут обрезаны
-    val saturation: Int = 100, // Насыщенность в процентах [0-200]
-    val colorProcessingEnabled: Boolean = true // Главный выключатель обработки цвета
+    // Color-correction state is mutable so the service can push live preference
+    // changes into an already-running capture session without restarting it.
+    @Volatile var brightness: Int = 100,
+    @Volatile var contrast: Int = 100,
+    @Volatile var blackLevel: Int = 0,
+    @Volatile var whiteLevel: Int = 100,
+    @Volatile var saturation: Int = 100,
+    @Volatile var colorProcessingEnabled: Boolean = true,
+    @Volatile var brightnessR: Int = 100,
+    @Volatile var brightnessG: Int = 100,
+    @Volatile var brightnessB: Int = 100,
+    @Volatile var gammaR: Int = 100,
+    @Volatile var gammaG: Int = 100,
+    @Volatile var gammaB: Int = 100
 ) {
+
+    /** Reload all color-correction fields from preferences. Cheap; safe to call from any thread. */
+    fun refreshColorSettings(prefs: Preferences) {
+        brightness = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_brightness, 100)
+        contrast = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_contrast, 100)
+        blackLevel = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_black_level, 0)
+        whiteLevel = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_white_level, 100)
+        saturation = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_saturation, 100)
+        colorProcessingEnabled = prefs.getBoolean(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_processing_enabled, true)
+        brightnessR = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_brightness_r, 100)
+        brightnessG = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_brightness_g, 100)
+        brightnessB = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_brightness_b, 100)
+        gammaR = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_gamma_r, 100)
+        gammaG = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_gamma_g, 100)
+        gammaB = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_color_gamma_b, 100)
+    }
+
     private val minimumImagePacketSize: Int
     val blackThreshold: Int = 5 // The limit each RGB value must be under to be considered a black pixel [0-255]
 
