@@ -207,6 +207,15 @@ Playback issues with high-quality video (2K/4K/HDR) while the ambient light is a
 2. Or completely disable the ambient light application while watching high-resolution content.
 3. You can try adjusting capture quality and FPS settings, but it is unlikely to fully solve the issue.
 
+**Black preview on 4K (Jellyfin, Kodi, mpv, …):**
+If your Hyperion/WLED/HyperHDR preview shows a black rectangle where the 4K/HDR video should be — but 1080p content captures fine — this is **not** a DRM issue. On Android, 4K (especially HEVC 10-bit / HDR10 / Dolby Vision) is rendered through a **secure hardware overlay** that bypasses SurfaceFlinger. `MediaProjection` can only see content composed by SurfaceFlinger, so the overlay region comes out as solid black. This is a platform limitation that also affects every other Android ambient-light tool (Hyperion Android, Lightpack apps, etc.) — there is no app-side fix.
+
+Workarounds:
+1. **Drop the playback to 1080p** in the player/server (Jellyfin → set max bitrate / resolution per device; Kodi → adjust playback settings; mpv → `--hwdec=no` plus `--vo=gpu`). 1080p almost always goes through the regular composition stack.
+2. **Disable hardware decoding** in the player (Jellyfin Android: Settings → Player → toggle off "Prefer FMP4" and "Allow background audio playback"; in mpv → `--hwdec=no`). Software decode forces the frame through the composition path, restoring capture.
+3. **For rooted devices** — try `Screencap (Root)` or `Screencap (Shell)` capture method in Settings → these go through the `screencap` binary instead of `MediaProjection` and on many devices bypass the overlay flag.
+4. **On MediaTek SoC TVs** the experimental `MTK THAL Capture` method captures directly from the vendor DIP engine (before composition), and 4K HDR works there — but requires both root and an MTK chip.
+
 ### DRM-Protected Content
 **DRM-protected applications** (such as Netflix, Disney+, Amazon Prime Video, Кинопоиск, and similar streaming services) **will not work** with screen capture mode due to Android's security restrictions. This is a fundamental limitation of the Android MediaProjection API and cannot be bypassed.
 
