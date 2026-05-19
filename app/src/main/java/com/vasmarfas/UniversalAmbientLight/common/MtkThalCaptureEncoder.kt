@@ -15,6 +15,8 @@ import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -166,20 +168,57 @@ class MtkThalCaptureEncoder(
         private const val DMA_HEAP_PATH = "/dev/dma_heap/mtk_dip_capture_uncached"
         private const val THAL_LIB_PATH = "/vendor/lib/libthal_capture.so"
         private const val STATUS_MAGIC = 0x4D544B53 // "MTKS"
+        private const val AVAILABILITY_CHECK_TIMEOUT_SEC = 3L
 
+        @Volatile private var sCachedAvailable: Boolean? = null
+        private val sCheckInProgress = AtomicBoolean(false)
+
+        /**
+         * Returns whether MTK THAL capture is available on this device.
+         *
+         * NEVER blocks the caller: the first call kicks off a `su -c` probe on a
+         * background daemon thread and returns `false`. The cached result becomes
+         * available on subsequent calls. This avoids the ANR that the old
+         * blocking implementation caused when invoked from Compose/main thread
+         * (SettingsScreen reads this during recomposition).
+         */
         fun isAvailable(): Boolean {
+            sCachedAvailable?.let { return it }
+            // First caller starts the background probe; everyone else just sees false until it lands.
+            if (sCheckInProgress.compareAndSet(false, true)) {
+                Thread {
+                    try {
+                        sCachedAvailable = checkAvailableBlocking()
+                    } finally {
+                        sCheckInProgress.set(false)
+                    }
+                }.apply {
+                    isDaemon = true
+                    name = "MtkThalAvailCheck"
+                }.start()
+            }
+            return false
+        }
+
+        fun isAvailable(context: Context): Boolean = isAvailable()
+
+        private fun checkAvailableBlocking(): Boolean {
             return try {
-                val process = Runtime.getRuntime().exec(arrayOf("su", "-c",
-                    "test -f $THAL_LIB_PATH && test -e $DMA_HEAP_PATH && echo OK"))
+                val process = Runtime.getRuntime().exec(
+                    arrayOf("su", "-c", "test -f $THAL_LIB_PATH && test -e $DMA_HEAP_PATH && echo OK")
+                )
+                val completed = process.waitFor(AVAILABILITY_CHECK_TIMEOUT_SEC, TimeUnit.SECONDS)
+                if (!completed) {
+                    try { process.destroy() } catch (_: Exception) {}
+                    Log.w(TAG, "Availability probe timed out after ${AVAILABILITY_CHECK_TIMEOUT_SEC}s")
+                    return false
+                }
                 val result = process.inputStream.bufferedReader().readText().trim()
-                process.waitFor()
                 result == "OK"
             } catch (e: Exception) {
                 false
             }
         }
-
-        fun isAvailable(context: Context): Boolean = isAvailable()
     }
 
     private fun readFrameLoop() {

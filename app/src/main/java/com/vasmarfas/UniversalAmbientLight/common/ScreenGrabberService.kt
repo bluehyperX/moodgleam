@@ -34,6 +34,7 @@ import java.util.Objects
 class ScreenGrabberService : Service() {
 
     private var mForegroundFailed = false
+    private var mForegroundStarted = false
     private var mTclBlocked = false
     private var mWakeLock: PowerManager.WakeLock? = null
     private var mWifiLock: WifiManager.WifiLock? = null
@@ -192,6 +193,7 @@ class ScreenGrabberService : Service() {
     }
 
     override fun onCreate() {
+        sInstanceRunning = true
         mNotificationManager = getSystemService(NOTIFICATION_SERVICE) as? NotificationManager
         mHandler = Handler(Looper.getMainLooper())
 
@@ -296,25 +298,22 @@ class ScreenGrabberService : Service() {
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (DEBUG) Log.v(TAG, "Start command received")
+
+        // CRITICAL: Android requires startForeground() within ~5s of every
+        // startForegroundService() call, regardless of action or current state.
+        // Previously startForeground was only called inside ACTION_START/ACTION_START_CAMERA,
+        // which meant ACTION_STOP/ACTION_CLEAR/GET_STATUS/ACTION_EXIT and re-issued
+        // ACTION_START while already running could trigger
+        // ForegroundServiceDidNotStartInTimeException (FATAL).
+        ensureForegroundStarted(initialForegroundTypeFor(intent?.action))
+
         super.onStartCommand(intent, flags, startId)
         if (intent == null || intent.action == null) {
             val nullItem = if (intent == null) "intent" else "action"
             if (DEBUG) Log.v(TAG, "Null $nullItem provided to start command")
             // Service was restarted by Android (START_STICKY) without a valid intent.
-            // We must call startForeground() immediately to satisfy the 5-second window,
-            // then stop since there is no projection token to resume with.
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    ServiceCompat.startForeground(
-                        this, NOTIFICATION_ID, notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-                    )
-                } else {
-                    startForeground(NOTIFICATION_ID, notification)
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "startForeground on null-intent restart failed: ${e.message}")
-            }
+            // Foreground was already (re)started above; just stop since there's
+            // no projection token to resume with.
             stopSelf()
             return START_NOT_STICKY
         } else {
@@ -435,7 +434,9 @@ class ScreenGrabberService : Service() {
         releaseWakeLock()
         stopAllCapture()
         stopForeground(true)
+        mForegroundStarted = false
         notifyActivity()
+        sInstanceRunning = false
 
         super.onDestroy()
     }
@@ -455,7 +456,50 @@ class ScreenGrabberService : Service() {
         }
     }
 
+    /**
+     * Picks the most-specific foreground type for the action at the top of onStartCommand.
+     * Used by [ensureForegroundStarted] to satisfy Android's 5-second window even before
+     * we've decided whether to actually start capture.
+     */
+    private fun initialForegroundTypeFor(action: String?): Int {
+        return when (action) {
+            ACTION_START_CAMERA -> ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            ACTION_START -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            else -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+        }
+    }
+
+    /**
+     * Idempotent startForeground guard. Always call early in onStartCommand so we
+     * never miss the 5-second window. TCL/restricted-OEM failures are recorded but
+     * don't bubble up — the action-specific [tryStartForegroundCompat] path handles
+     * retry/notify when capture is actually being requested.
+     */
+    private fun ensureForegroundStarted(type: Int) {
+        if (mForegroundStarted) return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            mForegroundStarted = true
+        } catch (e: Exception) {
+            Log.w(TAG, "ensureForegroundStarted failed (type=$type): ${e.message}")
+            val msg = e.message
+            if (msg != null && (msg.contains("TclAppBoot") || msg.contains("forbid"))) {
+                mTclBlocked = true
+            }
+        }
+    }
+
     private fun tryStartForegroundCompat(type: Int): Boolean {
+        // Already foregrounded by ensureForegroundStarted() — nothing to do.
+        if (mForegroundStarted) {
+            mForegroundFailed = false
+            mTclBlocked = false
+            return true
+        }
         mForegroundFailed = false
         mTclBlocked = false
 
@@ -468,6 +512,7 @@ class ScreenGrabberService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            mForegroundStarted = true
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Foreground start failed: " + e.message)
@@ -491,6 +536,7 @@ class ScreenGrabberService : Service() {
                 }
                 mForegroundFailed = false
                 mTclBlocked = false
+                mForegroundStarted = true
                 return true
             } catch (e: Exception) {
                 Log.e(TAG, "Foreground retry failed: " + e.message)
@@ -503,6 +549,11 @@ class ScreenGrabberService : Service() {
     }
 
     private fun tryStartForegroundCamera(): Boolean {
+        if (mForegroundStarted) {
+            mForegroundFailed = false
+            mTclBlocked = false
+            return true
+        }
         mForegroundFailed = false
         mTclBlocked = false
 
@@ -515,6 +566,7 @@ class ScreenGrabberService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
+            mForegroundStarted = true
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Foreground start (camera) failed: " + e.message)
@@ -539,6 +591,7 @@ class ScreenGrabberService : Service() {
                 }
                 mForegroundFailed = false
                 mTclBlocked = false
+                mForegroundStarted = true
                 return true
             } catch (e: Exception) {
                 Log.e(TAG, "Foreground retry (camera) failed: " + e.message)
@@ -1103,5 +1156,15 @@ class ScreenGrabberService : Service() {
         private const val NOTIFICATION_EXIT_INTENT_ID = 2
 
         private var sMediaProjection: MediaProjection? = null
+
+        /**
+         * True while the service instance is alive (onCreate to onDestroy).
+         * Used by MainActivity instead of the slow/deprecated
+         * ActivityManager.getRunningServices() check. The service runs in the
+         * same process as MainActivity, so a static flag is accurate.
+         */
+        @Volatile @JvmStatic
+        var sInstanceRunning: Boolean = false
+            internal set
     }
 }

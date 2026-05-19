@@ -6,6 +6,7 @@ import android.hardware.usb.UsbManager
 import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import java.util.concurrent.TimeUnit
+import androidx.annotation.WorkerThread
 
 /**
  * Grants USB device permission via root (su + app_process) so that
@@ -55,8 +56,13 @@ object UsbRootPermissionHelper {
      * Grants USB permission for all connected serial devices via root.
      * Uses app_process to call the hidden IUsbManager.grantDevicePermission() API.
      *
+     * MUST be called from a background thread — internally spawns `su` and
+     * blocks on its stdout. Calling from main thread can trigger ANR
+     * (see [grantPermissionViaRootAsync] for a fire-and-forget variant).
+     *
      * @return true if at least one device permission was granted
      */
+    @WorkerThread
     fun grantPermissionViaRoot(context: Context): Boolean {
         val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager ?: return false
         val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
@@ -85,6 +91,7 @@ object UsbRootPermissionHelper {
         return anyGranted
     }
 
+    @WorkerThread
     private fun grantSingleDevice(context: Context, deviceName: String, uid: Int): Boolean {
         val apkPath = context.applicationInfo.sourceDir
         val cmd = "CLASSPATH=$apkPath app_process /system/bin " +
@@ -93,9 +100,16 @@ object UsbRootPermissionHelper {
 
         return try {
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            // Bound the wait so a stuck su daemon can't block the worker thread forever.
+            val completed = process.waitFor(GRANT_TIMEOUT_SEC, TimeUnit.SECONDS)
+            if (!completed) {
+                try { process.destroy() } catch (_: Exception) {}
+                Log.w(TAG, "app_process grant timed out after ${GRANT_TIMEOUT_SEC}s for $deviceName")
+                return false
+            }
             val stdout = process.inputStream.bufferedReader().readText()
             val stderr = process.errorStream.bufferedReader().readText()
-            val exitCode = process.waitFor()
+            val exitCode = process.exitValue()
 
             if (exitCode == 0) {
                 Log.i(TAG, "app_process grant OK: $stdout")
@@ -109,4 +123,31 @@ object UsbRootPermissionHelper {
             false
         }
     }
+
+    /**
+     * Fire-and-forget root grant. Safe to call from main thread.
+     * Posts [onComplete] back on the main thread with the result.
+     */
+    fun grantPermissionViaRootAsync(
+        context: Context,
+        onComplete: (granted: Boolean) -> Unit
+    ) {
+        val appContext = context.applicationContext
+        Thread {
+            val result = try {
+                grantPermissionViaRoot(appContext)
+            } catch (e: Exception) {
+                Log.e(TAG, "grantPermissionViaRootAsync failed", e)
+                false
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                onComplete(result)
+            }
+        }.apply {
+            isDaemon = true
+            name = "UsbRootGrantAsync"
+        }.start()
+    }
+
+    private const val GRANT_TIMEOUT_SEC = 4L
 }

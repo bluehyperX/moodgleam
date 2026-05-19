@@ -137,31 +137,38 @@ class MainActivity : ComponentActivity() {
             val checked = intent.getBooleanExtra(ScreenGrabberService.BROADCAST_TAG, false)
             val wasRunning = mRecorderRunning
             mRecorderRunning = checked
-            
+
             if (wasRunning && !checked && mSessionStartTime != null) {
                 val durationSeconds = ((System.currentTimeMillis() - mSessionStartTime!!) / 1000).coerceAtLeast(0)
                 AnalyticsHelper.logScreenCaptureStopped(this@MainActivity, durationSeconds)
                 mSessionStartTime = null
             }
-            
+
             val error = intent.getStringExtra(ScreenGrabberService.BROADCAST_ERROR)
             val tclBlocked = intent.getBooleanExtra(ScreenGrabberService.BROADCAST_TCL_BLOCKED, false)
 
+            // Defer UI side-effects (dialog/toast) to the next main-thread cycle so
+            // we return from onReceive quickly. LocalBroadcastManager drains the
+            // entire pending queue synchronously inside one Handler message;
+            // showing a dialog or invoking a shell-exec callback in here can stall
+            // the broadcaster thread and trip a "slow operations in main thread" ANR.
             if (tclBlocked && !mTclWarningShown) {
                 mTclWarningShown = true
-                TclBypass.showTclHelpDialog(this@MainActivity) { requestScreenCapture() }
-            } else if (error != null &&
-                (false ||
-                        !QuickTileService.isListening)
-            ) {
-                Toast.makeText(baseContext, error, Toast.LENGTH_LONG).show()
+                window.decorView.post {
+                    TclBypass.showTclHelpDialog(this@MainActivity) { requestScreenCapture() }
+                }
+            } else if (error != null && !QuickTileService.isListening) {
+                val errorMessage = error
+                window.decorView.post {
+                    Toast.makeText(baseContext, errorMessage, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         // Enable Edge-to-Edge mode manually to avoid using deprecated LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         // which Google Play flags in Android 15. Android 15+ (API 35+) requires LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS by default.
         // This mode is available from Android 11 (API 30).
@@ -176,9 +183,12 @@ class MainActivity : ComponentActivity() {
 
         mMediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
-        // Initialize Play In-App Updates
+        // Initialize Play In-App Updates lazily — AppUpdateManagerFactory.create() and the
+        // initial appUpdateInfo task can take 200-500ms on cold start (Play Services init).
+        // Deferring them to the next main-loop cycle keeps onCreate under the ANR window
+        // on low-end TV boxes (was line ~195 in the ANR report, just before setContent).
         appUpdateManager = AppUpdateManagerFactory.create(this)
-        checkForUpdates()
+        window.decorView.post { checkForUpdates() }
 
         LocalBroadcastManager.getInstance(this).registerReceiver(
             mMessageReceiver, IntentFilter(ScreenGrabberService.BROADCAST_FILTER)
@@ -571,13 +581,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isServiceRunning(): Boolean {
-        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        for (service in manager.getRunningServices(Int.MAX_VALUE)) {
-            if (ScreenGrabberService::class.java.name == service.service.className) {
-                return true
-            }
-        }
-        return false
+        // ActivityManager.getRunningServices(Int.MAX_VALUE) is deprecated on API 26+,
+        // returns only our own services anyway, and iterates a system list that can be
+        // slow on stressed devices (was a contributor to MainActivity.onCreate ANRs).
+        // ScreenGrabberService runs in our own process, so a static flag is accurate.
+        return ScreenGrabberService.sInstanceRunning
     }
 
     companion object {
