@@ -26,6 +26,7 @@ class AccessibilityEncoder(
     private val mFrameIntervalMs: Long = max(200L, 1000L / mOptions.frameRate)
 
     private var mRgbBuffer: ByteArray? = null
+    private val mBorderCropper = com.vasmarfas.UniversalAmbientLight.common.util.BorderProcessor()
     private var mPixelBuffer: IntArray? = null
 
     private val mCaptureRunnable = object : Runnable {
@@ -149,7 +150,8 @@ class AccessibilityEncoder(
         }
 
         ColorProcessor.processRgbData(mRgbBuffer!!, mOptions)
-        mListener.sendFrame(mRgbBuffer!!, fw, fh)
+        val cropped = mBorderCropper.applyForEncoder(mRgbBuffer!!, fw, fh, mOptions)
+        mListener.sendFrame(cropped.rgb, cropped.width, cropped.height)
         
         if (bmp != bitmap) {
             bmp.recycle()

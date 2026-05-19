@@ -43,6 +43,7 @@ class ScreenrecordEncoder(
 
     // Reused across frames — no allocations in the hot path
     @Volatile private var mRgbBuffer: ByteArray? = null
+    private val mBorderCropper = com.vasmarfas.UniversalAmbientLight.common.util.BorderProcessor()
 
     // Bounded queue: read thread produces, codec-input thread consumes.
     // 128 × 16KB chunks ≈ 2MB max backlog before applying back-pressure.
@@ -395,7 +396,8 @@ class ScreenrecordEncoder(
         }
 
         ColorProcessor.processRgbData(rgb, mOptions)
-        mListener.sendFrame(rgb, sw, sh)
+        val cropped = mBorderCropper.applyForEncoder(rgb, sw, sh, mOptions)
+        mListener.sendFrame(cropped.rgb, cropped.width, cropped.height)
     }
 
     private fun sendAvgDirect(

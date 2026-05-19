@@ -68,6 +68,7 @@ class CameraEncoder(
     private var srcBitmap: Bitmap? = null
     private var correctedBitmap: Bitmap? = null
     private var rgbBuffer: ByteArray? = null
+    private val mBorderCropper = com.vasmarfas.UniversalAmbientLight.common.util.BorderProcessor()
     private var rgbaBytes: ByteArray? = null
     private var pixelInts: IntArray? = null
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
@@ -340,8 +341,9 @@ class CameraEncoder(
         // 8. Apply color processing
         ColorProcessor.processRgbData(rgbBuffer!!, options)
 
-        // 9. Send frame
-        listener.sendFrame(rgbBuffer!!, outputWidth, outputHeight)
+        // 9. Send frame (with optional letterbox crop)
+        val cropped = mBorderCropper.applyForEncoder(rgbBuffer!!, outputWidth, outputHeight, options)
+        listener.sendFrame(cropped.rgb, cropped.width, cropped.height)
     }
 
     // ======================== Helpers ========================

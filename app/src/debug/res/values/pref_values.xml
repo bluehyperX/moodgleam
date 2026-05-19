@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only preference defaults.
+  Values here override those in app/src/main/res/values/pref_values.xml
+  ONLY for debug builds (release ships with the main defaults unchanged).
+-->
+<resources>
+    <!-- Developer's physical LED layout: left 42, top 74, right 43, bottom 73 -->
+    <integer name="pref_default_led_count_top">74</integer>
+    <integer name="pref_default_led_count_right">43</integer>
+    <integer name="pref_default_led_count_bottom">73</integer>
+    <integer name="pref_default_led_count_left">42</integer>
+
+    <!-- Legacy global counts: pick the larger of the two opposite sides so any code
+         that still reads x_led/y_led gets a sane upper bound. -->
+    <integer name="pref_default_x_led">74</integer>
+    <integer name="pref_default_y_led">43</integer>
+</resources>

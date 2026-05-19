@@ -217,6 +217,15 @@
   <string name="pref_summary_color_gamma_channel">Гамма-кривая канала (50–300%, 100 — линейная)</string>
   <string name="pref_color_preview_title">Превью (с применением обработки)</string>
   <string name="pref_color_preview_hint">Отражает то, что будет отправлено на LED-ленту. Анимации на главном экране НЕ используют эти настройки.</string>
+  <string name="pref_group_border_detection">Автоопределение чёрных полос (letterbox)</string>
+  <string name="pref_title_border_detection_enabled">Автоопределение чёрных полос</string>
+  <string name="pref_summary_border_detection_enabled">Игнорировать чёрные полосы вокруг картинки (16:9, 1.85:1, 2.39:1). По умолчанию выключено.</string>
+  <string name="pref_title_border_threshold">Порог чёрного (RGB 0–64)</string>
+  <string name="pref_summary_border_threshold">Значение RGB-канала, ниже которого пиксель считается чёрным. Меньше — строже (только настоящий чёрный); больше — агрессивнее (обрежет тёмно-серое). По умолчанию 18.</string>
+  <string name="pref_title_border_check_interval">Интервал детекции (кадры)</string>
+  <string name="pref_summary_border_check_interval">Пересканировать полосы каждые N захваченных кадров. При 60 fps значение 60 ≈ 1 секунда. Больше — меньше нагрузка на CPU, но медленнее реакция. Диапазон 1–300, по умолчанию 60.</string>
+  <string name="unit_rgb">RGB</string>
+  <string name="unit_frames">кадров</string>
   <string name="battery_optimization_prompt">Чтобы захват/подсветка стабильнее работали в фоне (особенно на TV), рекомендуем отключить оптимизацию батареи для приложения.</string>
   <string-array name="pref_list_capture_quality">
     <item>Низкое (64px)</item>

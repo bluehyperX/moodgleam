@@ -22,8 +22,20 @@ class AppOptions(
     @Volatile var brightnessB: Int = 100,
     @Volatile var gammaR: Int = 100,
     @Volatile var gammaG: Int = 100,
-    @Volatile var gammaB: Int = 100
+    @Volatile var gammaB: Int = 100,
+    @Volatile var borderDetectionEnabled: Boolean = false,
+    @Volatile var borderThreshold: Int = 18,
+    @Volatile var borderCheckIntervalFrames: Int = 60
 ) {
+
+    /** Reload border-detection fields from preferences. */
+    fun refreshBorderSettings(prefs: Preferences) {
+        borderDetectionEnabled = prefs.getBoolean(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_border_detection_enabled, false)
+        borderThreshold = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_border_threshold, 18)
+            .coerceIn(0, 64)
+        borderCheckIntervalFrames = prefs.getInt(com.vasmarfas.UniversalAmbientLight.R.string.pref_key_border_check_interval, 60)
+            .coerceIn(1, 300)
+    }
 
     /** Reload all color-correction fields from preferences. Cheap; safe to call from any thread. */
     fun refreshColorSettings(prefs: Preferences) {

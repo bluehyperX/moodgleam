@@ -216,6 +216,15 @@
   <string name="pref_summary_color_gamma_channel">Gamma curve for the channel (50-300%, 100 = linear)</string>
   <string name="pref_color_preview_title">Preview (after color processing)</string>
   <string name="pref_color_preview_hint">Reflects what will be sent to the LED strip. The animations on the Home screen do NOT use these settings.</string>
+  <string name="pref_group_border_detection">Black bar (letterbox) detection</string>
+  <string name="pref_title_border_detection_enabled">Auto-detect letterbox</string>
+  <string name="pref_summary_border_detection_enabled">Ignore black bars around the picture (works for 16:9, 1.85:1, 2.39:1 content). Off by default.</string>
+  <string name="pref_title_border_threshold">Black threshold (RGB 0–64)</string>
+  <string name="pref_summary_border_threshold">RGB-channel value below which a pixel is treated as black. Lower = stricter (only pure black counts); higher = more aggressive (also crops dark grey edges). Default 18.</string>
+  <string name="pref_title_border_check_interval">Detection interval (frames)</string>
+  <string name="pref_summary_border_check_interval">Re-scan the frame for bars every N captured frames. At 60 fps, 60 ≈ 1 second. Higher = less CPU but slower reaction. Range 1–300, default 60.</string>
+  <string name="unit_rgb">RGB</string>
+  <string name="unit_frames">frames</string>
   <string name="battery_optimization_prompt">Чтобы захват/подсветка стабильнее работали в фоне (особенно на TV), рекомендуем отключить оптимизацию батареи для приложения.</string>
   <string-array name="pref_list_capture_quality">
     <item>Low (64px)</item>

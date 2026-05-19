@@ -3,7 +3,8 @@
     <string name="pref_key_host" translatable="false">pref_key_host</string>
 
     <string name="pref_key_port" translatable="false">pref_key_port</string>
-    <integer name="pref_default_port" translatable="false">19400</integer>
+    <!-- Matches the default connection (WLED + UDP Raw / DRGB). -->
+    <integer name="pref_default_port" translatable="false">19446</integer>
     <integer name="pref_default_wled_port" translatable="false">19446</integer>
 
     <string name="pref_key_y_led" translatable="false">pref_key_y_led</string>
@@ -57,7 +58,7 @@
     <bool name="pref_default_use_avg_color" translatable="false">false</bool>
 
     <string name="pref_key_connection_type" translatable="false">pref_key_connection_type</string>
-    <string name="pref_default_connection_type" translatable="false">hyperion</string>
+    <string name="pref_default_connection_type" translatable="false">wled</string>
 
     <string name="pref_key_adalight_baudrate" translatable="false">pref_key_adalight_baudrate</string>
     <integer name="pref_default_adalight_baudrate" translatable="false">115200</integer>
@@ -191,7 +192,7 @@
     <integer name="pref_default_color_saturation" translatable="false">100</integer>
 
     <string name="pref_key_color_processing_enabled" translatable="false">pref_key_color_processing_enabled</string>
-    <bool name="pref_default_color_processing_enabled" translatable="false">true</bool>
+    <bool name="pref_default_color_processing_enabled" translatable="false">false</bool>
 
     <!-- Per-channel brightness (issue #21). 100 = identity. Final brightness = global * channel / 100. -->
     <string name="pref_key_color_brightness_r" translatable="false">pref_key_color_brightness_r</string>
@@ -208,4 +209,16 @@
     <integer name="pref_default_color_gamma_g" translatable="false">100</integer>
     <string name="pref_key_color_gamma_b" translatable="false">pref_key_color_gamma_b</string>
     <integer name="pref_default_color_gamma_b" translatable="false">100</integer>
+
+    <!-- Auto letterbox / black bar detection (issue #23).
+         Defaults: feature off so existing users don't see a behavior change. When the user enables it,
+         threshold 18 catches typical letterbox bars (real "black" on most TVs sits around 0-12 on the RGB
+         scale; we leave headroom for compression noise) without false-cropping on dark scenes. Interval
+         60 frames ≈ 1 s at 60fps — fast enough to follow scene cuts, cheap on CPU. -->
+    <string name="pref_key_border_detection_enabled" translatable="false">pref_key_border_detection_enabled</string>
+    <bool name="pref_default_border_detection_enabled" translatable="false">false</bool>
+    <string name="pref_key_border_threshold" translatable="false">pref_key_border_threshold</string>
+    <integer name="pref_default_border_threshold" translatable="false">18</integer>
+    <string name="pref_key_border_check_interval" translatable="false">pref_key_border_check_interval</string>
+    <integer name="pref_default_border_check_interval" translatable="false">60</integer>
 </resources>

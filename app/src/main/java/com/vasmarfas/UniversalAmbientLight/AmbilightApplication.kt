@@ -15,9 +15,51 @@ class AmbilightApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         installFrameworkBugFilter()
+        seedXmlDefaults()
         migratePreferences()
         // Инициализируем user properties при запуске приложения
         AnalyticsHelper.initializeUserProperties(this)
+    }
+
+    /**
+     * `Preferences.getString(key, default)` ignores the xml `pref_default_*` resource
+     * — callers pass explicit Kotlin defaults, so any debug-only override placed in
+     * `pref_values.xml` would never be observed. Same story for `getBoolean`. This
+     * routine writes xml defaults into SharedPreferences on first run (idempotent —
+     * only fills missing keys), so resource overrides actually take effect.
+     */
+    private fun seedXmlDefaults() {
+        val prefs = Preferences(this)
+
+        listOf(
+            R.string.pref_key_connection_type to R.string.pref_default_connection_type,
+            R.string.pref_key_wled_protocol to R.string.pref_default_wled_protocol
+        ).forEach { (keyRes, defRes) ->
+            if (!prefs.contains(keyRes)) {
+                runCatching { prefs.putString(keyRes, getString(defRes)) }
+            }
+        }
+
+        listOf(
+            R.string.pref_key_color_processing_enabled to R.bool.pref_default_color_processing_enabled
+        ).forEach { (keyRes, defRes) ->
+            if (!prefs.contains(keyRes)) {
+                runCatching { prefs.putBoolean(keyRes, resources.getBoolean(defRes)) }
+            }
+        }
+
+        // Integer prefs whose callers pass hardcoded Kotlin defaults to getInt() and
+        // therefore never observe the xml resource default unless we seed them.
+        listOf(
+            R.string.pref_key_port to R.integer.pref_default_port
+        ).forEach { (keyRes, defRes) ->
+            if (!prefs.contains(keyRes)) {
+                runCatching {
+                    // Numeric prefs are stored as strings (matches EditTextPreference behaviour).
+                    prefs.putString(keyRes, resources.getInteger(defRes).toString())
+                }
+            }
+        }
     }
 
     /**

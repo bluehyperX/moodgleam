@@ -56,6 +56,7 @@ class ScrcpyEncoder(
 
     private val mFrameQueue = ArrayBlockingQueue<Frame>(64)
     private var mSupervisorThread: Thread? = null
+    private val mBorderCropper = com.vasmarfas.UniversalAmbientLight.common.util.BorderProcessor()
 
     val mCapW: Int
     val mCapH: Int
@@ -527,7 +528,8 @@ class ScrcpyEncoder(
             }
         }
         ColorProcessor.processRgbData(rgb, mOptions)
-        mListener.sendFrame(rgb, sw, sh)
+        val cropped = mBorderCropper.applyForEncoder(rgb, sw, sh, mOptions)
+        mListener.sendFrame(cropped.rgb, cropped.width, cropped.height)
     }
 
     private fun sendAvgDirect(

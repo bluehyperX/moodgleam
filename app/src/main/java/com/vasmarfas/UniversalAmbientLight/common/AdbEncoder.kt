@@ -32,6 +32,7 @@ class AdbEncoder(
     private val mFrameIntervalMs: Long = max(100L, 1000L / mOptions.frameRate)
 
     private var mRgbBuffer: ByteArray? = null
+    private val mBorderCropper = com.vasmarfas.UniversalAmbientLight.common.util.BorderProcessor()
     private var mPixelBuffer: IntArray? = null
 
     // Start with raw RGBA (no PNG overhead). Fall back to PNG if parsing fails.
@@ -253,7 +254,8 @@ class AdbEncoder(
         }
 
         ColorProcessor.processRgbData(mRgbBuffer!!, mOptions)
-        mListener.sendFrame(mRgbBuffer!!, w, h)
+        val cropped = mBorderCropper.applyForEncoder(mRgbBuffer!!, w, h, mOptions)
+        mListener.sendFrame(cropped.rgb, cropped.width, cropped.height)
     }
 
     private fun sendAvgColor(bitmap: Bitmap) {

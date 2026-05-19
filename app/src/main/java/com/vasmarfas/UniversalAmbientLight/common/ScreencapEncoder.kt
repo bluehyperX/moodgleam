@@ -50,6 +50,7 @@ class ScreencapEncoder(
 
     private var mRgbBuffer: ByteArray? = null
     private var mPixelBuffer: IntArray? = null
+    private val mBorderCropper = com.vasmarfas.UniversalAmbientLight.common.util.BorderProcessor()
     
     private var mUseRawScreencap = false
     private var mUseFileMode = false
@@ -332,7 +333,8 @@ class ScreencapEncoder(
         }
 
         ColorProcessor.processRgbData(mRgbBuffer!!, mOptions)
-        mListener.sendFrame(mRgbBuffer!!, w, h)
+        val cropped = mBorderCropper.applyForEncoder(mRgbBuffer!!, w, h, mOptions)
+        mListener.sendFrame(cropped.rgb, cropped.width, cropped.height)
     }
 
     private fun sendAvgColor(bitmap: Bitmap) {

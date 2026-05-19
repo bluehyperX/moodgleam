@@ -41,6 +41,7 @@ class ScreenEncoder(
     private var mRgbBuffer: ByteArray? = null
     private var mRowBuffer: ByteArray? = null
     private val mAvgColorResult = ByteArray(3)
+    private val mBorderCropper = com.vasmarfas.UniversalAmbientLight.common.util.BorderProcessor()
     private var mBorderX: Int = 0
     private var mBorderY: Int = 0
     private var mFrameCount: Int = 0
@@ -268,8 +269,6 @@ class ScreenEncoder(
         val pixelStride = plane.pixelStride
         val rowStride = plane.rowStride
 
-        updateBorderDetection(buffer, width, height, rowStride, pixelStride)
-
         if (mAvgColor) {
             sendAverageColor(buffer, width, height, rowStride, pixelStride)
         } else {
@@ -277,23 +276,6 @@ class ScreenEncoder(
         }
         
         mTotalProcessTime += (System.nanoTime() - startProc)
-    }
-
-    private fun updateBorderDetection(
-        buffer: ByteBuffer, width: Int, height: Int,
-        rowStride: Int, pixelStride: Int
-    ) {
-        if (!mRemoveBorders && !mAvgColor) return
-
-        if (++mFrameCount >= BORDER_CHECK_FRAMES) {
-            mFrameCount = 0
-            mBorderProcessor.parseBorder(buffer, width, height, rowStride, pixelStride)
-            val border = mBorderProcessor.currentBorder
-            if (border != null && border.isKnown) {
-                mBorderX = border.horizontalBorderIndex
-                mBorderY = border.verticalBorderIndex
-            }
-        }
     }
 
     private fun sendPixelData(
@@ -311,14 +293,14 @@ class ScreenEncoder(
         
         // Применяем обработку цветов
         ColorProcessor.processRgbData(rgb, mOptions)
-        
-        // Log occasionally for debugging
+
         if (DEBUG && System.currentTimeMillis() % 5000 < 100) {
             Log.d(TAG, "sendPixelData: effWidth=$effWidth, effHeight=$effHeight, rgb.size=${rgb.size}, expected=${effWidth * effHeight * 3}")
         }
-        
+
+        val cropped = mBorderCropper.applyForEncoder(rgb, effWidth, effHeight, mOptions)
         val startSend = System.nanoTime()
-        mListener.sendFrame(rgb, effWidth, effHeight)
+        mListener.sendFrame(cropped.rgb, cropped.width, cropped.height)
         mTotalSendTime += (System.nanoTime() - startSend)
     }
 

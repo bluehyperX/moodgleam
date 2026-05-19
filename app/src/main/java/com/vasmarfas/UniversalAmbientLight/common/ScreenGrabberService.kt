@@ -1100,7 +1100,10 @@ class ScreenGrabberService : Service() {
             brightnessB = prefs.getInt(R.string.pref_key_color_brightness_b, 100),
             gammaR = prefs.getInt(R.string.pref_key_color_gamma_r, 100),
             gammaG = prefs.getInt(R.string.pref_key_color_gamma_g, 100),
-            gammaB = prefs.getInt(R.string.pref_key_color_gamma_b, 100)
+            gammaB = prefs.getInt(R.string.pref_key_color_gamma_b, 100),
+            borderDetectionEnabled = prefs.getBoolean(R.string.pref_key_border_detection_enabled, false),
+            borderThreshold = prefs.getInt(R.string.pref_key_border_threshold, 18).coerceIn(0, 64),
+            borderCheckIntervalFrames = prefs.getInt(R.string.pref_key_border_check_interval, 60).coerceIn(1, 300)
         )
         mActiveOptions = opts
         registerColorPrefsListener()
@@ -1122,14 +1125,19 @@ class ScreenGrabberService : Service() {
         val keyGr = getString(R.string.pref_key_color_gamma_r)
         val keyGg = getString(R.string.pref_key_color_gamma_g)
         val keyGb = getString(R.string.pref_key_color_gamma_b)
+        val keyBorderOn = getString(R.string.pref_key_border_detection_enabled)
+        val keyBorderTh = getString(R.string.pref_key_border_threshold)
+        val keyBorderIv = getString(R.string.pref_key_border_check_interval)
         val colorKeys = setOf(
             keyBrightness, keyContrast, keyBlack, keyWhite, keySaturation, keyEnabled,
             keyBr, keyBg, keyBb, keyGr, keyGg, keyGb
         )
+        val borderKeys = setOf(keyBorderOn, keyBorderTh, keyBorderIv)
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key != null && key in colorKeys) {
-                mActiveOptions?.refreshColorSettings(Preferences(this))
-            }
+            if (key == null) return@OnSharedPreferenceChangeListener
+            val prefs = Preferences(this)
+            if (key in colorKeys) mActiveOptions?.refreshColorSettings(prefs)
+            if (key in borderKeys) mActiveOptions?.refreshBorderSettings(prefs)
         }
         sharedPrefs.registerOnSharedPreferenceChangeListener(listener)
         mPrefsListener = listener

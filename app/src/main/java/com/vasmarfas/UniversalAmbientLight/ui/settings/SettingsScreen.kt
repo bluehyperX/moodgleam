@@ -556,6 +556,41 @@ fun SettingsScreen(
                 }
             }
 
+            // Letterbox (black bar) detection (issue #23).
+            SettingsGroup(title = stringResource(R.string.pref_group_border_detection)) {
+                val rgbUnit = stringResource(R.string.unit_rgb)
+                val framesUnit = stringResource(R.string.unit_frames)
+                CheckBoxPreference(
+                    prefs = prefs,
+                    keyRes = R.string.pref_key_border_detection_enabled,
+                    title = stringResource(R.string.pref_title_border_detection_enabled),
+                    summary = stringResource(R.string.pref_summary_border_detection_enabled),
+                    onValueChange = { enabled ->
+                        AnalyticsHelper.logSettingChanged(context, "border_detection_enabled", enabled.toString())
+                    }
+                )
+                EditTextPreference(
+                    prefs = prefs,
+                    keyRes = R.string.pref_key_border_threshold,
+                    title = stringResource(R.string.pref_title_border_threshold),
+                    summaryProvider = { "$it $rgbUnit" },
+                    keyboardType = KeyboardType.Number,
+                    onValueChange = { newValue ->
+                        AnalyticsHelper.logSettingChanged(context, "border_threshold", newValue)
+                    }
+                )
+                EditTextPreference(
+                    prefs = prefs,
+                    keyRes = R.string.pref_key_border_check_interval,
+                    title = stringResource(R.string.pref_title_border_check_interval),
+                    summaryProvider = { "$it $framesUnit" },
+                    keyboardType = KeyboardType.Number,
+                    onValueChange = { newValue ->
+                        AnalyticsHelper.logSettingChanged(context, "border_check_interval", newValue)
+                    }
+                )
+            }
+
             // Smoothing Group
             SettingsGroup(title = stringResource(R.string.pref_group_smoothing)) {
                 CheckBoxPreference(
@@ -1094,12 +1129,20 @@ fun EditTextPreference(
     onValueChange: ((String) -> Unit)? = null,
     recomposeKey: Any? = null
 ) {
-    // Read value from prefs, but allow it to be overridden during composition
-    var value by remember(keyRes, recomposeKey) { mutableStateOf(prefs.getString(keyRes) ?: "") }
-    
+    // For numeric prefs the xml defaults live in <integer pref_default_*>; getString()
+    // doesn't see them. Fall back to getInt() so the UI shows the resource default
+    // instead of an empty field on first launch.
+    fun readInitial(): String {
+        val stored = prefs.getString(keyRes)
+        if (!stored.isNullOrEmpty()) return stored
+        return if (keyboardType == KeyboardType.Number) prefs.getInt(keyRes).toString() else ""
+    }
+
+    var value by remember(keyRes, recomposeKey) { mutableStateOf(readInitial()) }
+
     LaunchedEffect(externalValue, recomposeKey) {
         externalValue?.let { value = it }
-        recomposeKey?.let { value = prefs.getString(keyRes) ?: "" }
+        recomposeKey?.let { value = readInitial() }
     }
     
     // Reset dialog state when recomposeKey changes (e.g., when navigating away)

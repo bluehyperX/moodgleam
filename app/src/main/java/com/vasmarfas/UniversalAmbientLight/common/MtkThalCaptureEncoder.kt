@@ -54,6 +54,8 @@ class MtkThalCaptureEncoder(
     private var mCaptureWidth = 0
     private var mCaptureHeight = 0
 
+    private val mBorderCropper = com.vasmarfas.UniversalAmbientLight.common.util.BorderProcessor()
+
     init {
         calculateCaptureDimensions()
         // Defer slow work (APK extraction, su exec) to the worker so the constructor
@@ -267,7 +269,8 @@ class MtkThalCaptureEncoder(
                     input.readFully(rgb)
                     if (mRunning) {
                         ColorProcessor.processRgbData(rgb, mOptions)
-                        mListener.sendFrame(rgb, w, h)
+                        val cropped = mBorderCropper.applyForEncoder(rgb, w, h, mOptions)
+                        mListener.sendFrame(cropped.rgb, cropped.width, cropped.height)
                     }
                 }
             }
@@ -290,7 +293,8 @@ class MtkThalCaptureEncoder(
                 if (!mRunning) break
 
                 ColorProcessor.processRgbData(rgb, mOptions)
-                mListener.sendFrame(rgb, w, h)
+                val cropped = mBorderCropper.applyForEncoder(rgb, w, h, mOptions)
+                mListener.sendFrame(cropped.rgb, cropped.width, cropped.height)
             }
         } catch (e: IOException) {
             if (mRunning) {
