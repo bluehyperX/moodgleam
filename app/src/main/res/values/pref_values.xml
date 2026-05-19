@@ -192,4 +192,20 @@
 
     <string name="pref_key_color_processing_enabled" translatable="false">pref_key_color_processing_enabled</string>
     <bool name="pref_default_color_processing_enabled" translatable="false">true</bool>
+
+    <!-- Per-channel brightness (issue #21). 100 = identity. Final brightness = global * channel / 100. -->
+    <string name="pref_key_color_brightness_r" translatable="false">pref_key_color_brightness_r</string>
+    <integer name="pref_default_color_brightness_r" translatable="false">100</integer>
+    <string name="pref_key_color_brightness_g" translatable="false">pref_key_color_brightness_g</string>
+    <integer name="pref_default_color_brightness_g" translatable="false">100</integer>
+    <string name="pref_key_color_brightness_b" translatable="false">pref_key_color_brightness_b</string>
+    <integer name="pref_default_color_brightness_b" translatable="false">100</integer>
+
+    <!-- Per-channel gamma. 100 = gamma 1.0 (identity). 200 = gamma 2.0 (brighter mids). -->
+    <string name="pref_key_color_gamma_r" translatable="false">pref_key_color_gamma_r</string>
+    <integer name="pref_default_color_gamma_r" translatable="false">100</integer>
+    <string name="pref_key_color_gamma_g" translatable="false">pref_key_color_gamma_g</string>
+    <integer name="pref_default_color_gamma_g" translatable="false">100</integer>
+    <string name="pref_key_color_gamma_b" translatable="false">pref_key_color_gamma_b</string>
+    <integer name="pref_default_color_gamma_b" translatable="false">100</integer>
 </resources>
