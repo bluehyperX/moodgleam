@@ -45,6 +45,8 @@ import kotlin.math.min
 
 private const val MAX_LEDS_VISUALIZATION = 5000
 
+private const val MAX_LEDS_PER_SIDE = 5000
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LedLayoutScreen(
@@ -256,7 +258,7 @@ fun LedLayoutScreen(
                             topLedText = newText
                             newText.toIntOrNull()?.let { value ->
                                 if (value >= 0) {
-                                    prefs.putInt(R.string.pref_key_led_count_top, value)
+                                    prefs.putInt(R.string.pref_key_led_count_top, value.coerceAtMost(MAX_LEDS_PER_SIDE))
                                 }
                             }
                         },
@@ -265,7 +267,7 @@ fun LedLayoutScreen(
                             rightLedText = newText
                             newText.toIntOrNull()?.let { value ->
                                 if (value >= 0) {
-                                    prefs.putInt(R.string.pref_key_led_count_right, value)
+                                    prefs.putInt(R.string.pref_key_led_count_right, value.coerceAtMost(MAX_LEDS_PER_SIDE))
                                 }
                             }
                         },
@@ -274,7 +276,7 @@ fun LedLayoutScreen(
                             bottomLedText = newText
                             newText.toIntOrNull()?.let { value ->
                                 if (value >= 0) {
-                                    prefs.putInt(R.string.pref_key_led_count_bottom, value)
+                                    prefs.putInt(R.string.pref_key_led_count_bottom, value.coerceAtMost(MAX_LEDS_PER_SIDE))
                                 }
                             }
                         },
@@ -283,7 +285,7 @@ fun LedLayoutScreen(
                             leftLedText = newText
                             newText.toIntOrNull()?.let { value ->
                                 if (value >= 0) {
-                                    prefs.putInt(R.string.pref_key_led_count_left, value)
+                                    prefs.putInt(R.string.pref_key_led_count_left, value.coerceAtMost(MAX_LEDS_PER_SIDE))
                                 }
                             }
                         },
@@ -470,7 +472,7 @@ fun LedLayoutScreen(
                             topLedText = newText
                             newText.toIntOrNull()?.let { value ->
                                 if (value >= 0) {
-                                    prefs.putInt(R.string.pref_key_led_count_top, value)
+                                    prefs.putInt(R.string.pref_key_led_count_top, value.coerceAtMost(MAX_LEDS_PER_SIDE))
                                 }
                             }
                         },
@@ -479,7 +481,7 @@ fun LedLayoutScreen(
                             rightLedText = newText
                             newText.toIntOrNull()?.let { value ->
                                 if (value >= 0) {
-                                    prefs.putInt(R.string.pref_key_led_count_right, value)
+                                    prefs.putInt(R.string.pref_key_led_count_right, value.coerceAtMost(MAX_LEDS_PER_SIDE))
                                 }
                             }
                         },
@@ -488,7 +490,7 @@ fun LedLayoutScreen(
                             bottomLedText = newText
                             newText.toIntOrNull()?.let { value ->
                                 if (value >= 0) {
-                                    prefs.putInt(R.string.pref_key_led_count_bottom, value)
+                                    prefs.putInt(R.string.pref_key_led_count_bottom, value.coerceAtMost(MAX_LEDS_PER_SIDE))
                                 }
                             }
                         },
@@ -497,7 +499,7 @@ fun LedLayoutScreen(
                             leftLedText = newText
                             newText.toIntOrNull()?.let { value ->
                                 if (value >= 0) {
-                                    prefs.putInt(R.string.pref_key_led_count_left, value)
+                                    prefs.putInt(R.string.pref_key_led_count_left, value.coerceAtMost(MAX_LEDS_PER_SIDE))
                                 }
                             }
                         },
@@ -1073,10 +1075,10 @@ fun LedVisualization(
     modifier: Modifier = Modifier
 ) {
     val (safeTop, safeRight, safeBottom, safeLeft) = remember(topLed, rightLed, bottomLed, leftLed) {
-        val t = topLed.coerceAtLeast(0)
-        val r = rightLed.coerceAtLeast(0)
-        val b = bottomLed.coerceAtLeast(0)
-        val l = leftLed.coerceAtLeast(0)
+        val t = topLed.coerceIn(0, MAX_LEDS_PER_SIDE)
+        val r = rightLed.coerceIn(0, MAX_LEDS_PER_SIDE)
+        val b = bottomLed.coerceIn(0, MAX_LEDS_PER_SIDE)
+        val l = leftLed.coerceIn(0, MAX_LEDS_PER_SIDE)
         val total = t + r + b + l
 
         if (total > MAX_LEDS_VISUALIZATION) {
@@ -1287,10 +1289,10 @@ fun calculateLedPositions(
 
     val screenWidth = width - padding * 2
     val screenHeight = height - padding * 2
-    val topCount = topLed.coerceAtLeast(0)
-    val rightCount = rightLed.coerceAtLeast(0)
-    val bottomCount = bottomLed.coerceAtLeast(0)
-    val leftCount = leftLed.coerceAtLeast(0)
+    val topCount = topLed.coerceIn(0, MAX_LEDS_PER_SIDE)
+    val rightCount = rightLed.coerceIn(0, MAX_LEDS_PER_SIDE)
+    val bottomCount = bottomLed.coerceIn(0, MAX_LEDS_PER_SIDE)
+    val leftCount = leftLed.coerceIn(0, MAX_LEDS_PER_SIDE)
 
     // Calculate scan depth in pixels (visual approximation)
     // We use screenWidth/screenHeight which corresponds to the inner yellow box if 0 margins.

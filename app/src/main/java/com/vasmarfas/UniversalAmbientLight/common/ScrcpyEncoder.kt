@@ -165,22 +165,26 @@ class ScrcpyEncoder(
         mFrameQueue.clear()
         mSupervisorThread = Thread({
             var errors = 0
-            while (mRunning) {
-                val ok = runSession()
-                if (!mRunning) break
-                if (ok) {
-                    errors = 0
-                    Log.i(TAG, "scrcpy session ended normally, restarting…")
-                    Thread.sleep(500)
-                } else {
-                    if (++errors >= MAX_SESSION_ERRORS) {
-                        Log.e(TAG, "Too many consecutive errors, giving up")
-                        mCapturing = false
-                        break
+            try {
+                while (mRunning) {
+                    val ok = runSession()
+                    if (!mRunning) break
+                    if (ok) {
+                        errors = 0
+                        Log.i(TAG, "scrcpy session ended normally, restarting…")
+                        Thread.sleep(500)
+                    } else {
+                        if (++errors >= MAX_SESSION_ERRORS) {
+                            Log.e(TAG, "Too many consecutive errors, giving up")
+                            mCapturing = false
+                            break
+                        }
+                        Thread.sleep(3000)
                     }
-                    Thread.sleep(3000)
+                    mFrameQueue.clear()
                 }
-                mFrameQueue.clear()
+            } catch (_: InterruptedException) {
+                Log.i(TAG, "Supervisor interrupted, stopping")
             }
         }, "scrcpy-supervisor").also { it.isDaemon = true; it.start() }
     }

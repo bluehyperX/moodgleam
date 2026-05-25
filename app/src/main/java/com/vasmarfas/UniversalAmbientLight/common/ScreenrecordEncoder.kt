@@ -91,23 +91,26 @@ class ScreenrecordEncoder(
         mDataQueue.clear()
         mSupervisorThread = Thread({
             var sessionErrors = 0
-            while (mRunning) {
-                val ok = runSession()
-                if (!mRunning) break
-                if (ok) {
-                    // Normal exit (stream EOF / 3-min limit) — restart immediately
-                    sessionErrors = 0
-                    Log.i(TAG, "screenrecord ended normally, restarting…")
-                    Thread.sleep(300)
-                } else {
-                    sessionErrors++
-                    if (sessionErrors >= MAX_SESSION_ERRORS) {
-                        Log.e(TAG, "Too many consecutive errors, giving up")
-                        break
+            try {
+                while (mRunning) {
+                    val ok = runSession()
+                    if (!mRunning) break
+                    if (ok) {
+                        sessionErrors = 0
+                        Log.i(TAG, "screenrecord ended normally, restarting…")
+                        Thread.sleep(300)
+                    } else {
+                        sessionErrors++
+                        if (sessionErrors >= MAX_SESSION_ERRORS) {
+                            Log.e(TAG, "Too many consecutive errors, giving up")
+                            break
+                        }
+                        Thread.sleep(2000)
                     }
-                    Thread.sleep(2000)
+                    mDataQueue.clear()
                 }
-                mDataQueue.clear()
+            } catch (_: InterruptedException) {
+                Log.i(TAG, "Supervisor interrupted, stopping")
             }
         }, "screenrecord-supervisor").also {
             it.isDaemon = true
