@@ -21,10 +21,13 @@ fun getVersionCodeFrom(name: String, build: Int): Int {
     val minor = parts.getOrElse(1) { 0 }
     val patch = parts.getOrElse(2) { 0 }
 
-    // Logic: Major * 10000 + Minor * 100 + Patch + Build
-    // 2.4.5 -> 20405. 0.0.1 -> 1
-    // Ensure this logic creates a code higher than your previous published version if updating.
-    return (major * 10000) + (minor * 100) + patch + build
+    // versionCode layout: MAJOR | MINOR(2) | PATCH(2) | BUILD(3)
+    //   1.3.3  + run 38  -> 10303038
+    //   2.4.5  + run 120 -> 20405120
+    // The GitHub Actions run number occupies the last 3 digits (0..999); the version is
+    // readable in the high digits. Strictly increasing as long as version and run only
+    // grow. minor/patch are 2 digits (0..99), major up to ~214 (Int.MAX_VALUE limit).
+    return (major * 10_000_000) + (minor * 100_000) + (patch * 1_000) + build
 }
 
 val appVersionCode = getVersionCodeFrom(appVersionName, buildNumber)

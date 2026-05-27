@@ -15,6 +15,37 @@ on:
       version_name:
         description: 'App versionName (например 0.1.0 или 0.1.0-beta.1)'
         required: true
+      release_notes_github:
+        description: 'Release notes for the GitHub Release (optional; empty = no body, as before)'
+        required: false
+        default: ''
+      release_notes_googleplay_en:
+        description: 'Google Play What''s new — English (en-US). Max 500 chars. Optional.'
+        required: false
+        default: ''
+      release_notes_googleplay_ru:
+        description: 'Google Play What''s new — Russian (ru-RU). Max 500 chars. Optional.'
+        required: false
+        default: ''
+      release_notes_rustore:
+        description: 'What''s new for RuStore (optional; empty = no notes, as before)'
+        required: false
+        default: ''
+      github_publish:
+        description: 'Publish the GitHub Release immediately (unchecked = draft, as before)'
+        type: boolean
+        required: false
+        default: false
+      googleplay_send_to_review:
+        description: 'Send the Google Play release to review now — status=completed (unchecked = use Status field / stays draft)'
+        type: boolean
+        required: false
+        default: false
+      rustore_auto_publish:
+        description: 'RuStore: auto-publish after moderation passes (unchecked = manual publish, as before)'
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   build:
@@ -96,10 +127,11 @@ jobs:
       with:
         tag_name: ${{ steps.tag.outputs.tag_name }}
         name: Release ${{ github.event.inputs.version_name }}
+        body: ${{ inputs.release_notes_github }}
         files: |
           dist/apk/release/app-release.apk
           dist/bundle/release/app-release.aab
-        draft: true
+        draft: ${{ ! inputs.github_publish }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -116,6 +148,31 @@ jobs:
         name: android-release
         path: dist
 
+    - name: Prepare Google Play release notes
+      id: gp_notes
+      env:
+        GP_NOTES_EN: ${{ inputs.release_notes_googleplay_en }}
+        GP_NOTES_RU: ${{ inputs.release_notes_googleplay_ru }}
+      run: |
+        wrote=0
+        mkdir -p distribution/whatsnew
+        if [ -n "$GP_NOTES_EN" ]; then
+          printf '%s' "$GP_NOTES_EN" > distribution/whatsnew/whatsnew-en-US
+          echo "Wrote whatsnew-en-US"
+          wrote=1
+        fi
+        if [ -n "$GP_NOTES_RU" ]; then
+          printf '%s' "$GP_NOTES_RU" > distribution/whatsnew/whatsnew-ru-RU
+          echo "Wrote whatsnew-ru-RU"
+          wrote=1
+        fi
+        if [ "$wrote" = "1" ]; then
+          echo "dir=distribution/whatsnew" >> "$GITHUB_OUTPUT"
+        else
+          echo "dir=" >> "$GITHUB_OUTPUT"
+          echo "No Google Play notes provided; whatsNew will be skipped (as before)"
+        fi
+
     - name: Upload to Google Play
       uses: r0adkll/upload-google-play@v1
       with:
@@ -123,8 +180,10 @@ jobs:
         packageName: com.vasmarfas.UniversalAmbientLight
         releaseFiles: dist/bundle/release/app-release.aab
         track: ${{ inputs.track }}
-        status: ${{ inputs.status }}
-#        changesNotSentForReview: ${{ inputs.track != 'production' }}
+        # Checkbox on → completed + sent for review; off → use the Status field (draft by default).
+        status: ${{ inputs.googleplay_send_to_review && 'completed' || inputs.status }}
+        changesNotSentForReview: ${{ ! inputs.googleplay_send_to_review }}
+        whatsNewDirectory: ${{ steps.gp_notes.outputs.dir }}
 
   rustore:
     runs-on: ubuntu-latest
@@ -198,17 +257,22 @@ jobs:
           RUSTORE_JWE: ${{ env.RUSTORE_JWE }}
           PACKAGE_NAME: com.vasmarfas.UniversalAmbientLight
           APP_VERSION_NAME: ${{ github.event.inputs.version_name }}
+          RUSTORE_NOTES: ${{ inputs.release_notes_rustore }}
+          RUSTORE_PUBLISH_TYPE: ${{ inputs.rustore_auto_publish && 'INSTANTLY' || 'MANUAL' }}
         run: |
+          # Build the body with jq so the (optional, possibly multi-line) notes are safely escaped.
+          # whatsNew is added only when provided — otherwise the body is identical to before.
+          # publishType: INSTANTLY = auto-publish after moderation, MANUAL = publish by hand.
+          BODY=$(jq -n \
+            --arg publishType "$RUSTORE_PUBLISH_TYPE" \
+            --arg whatsNew "$RUSTORE_NOTES" \
+            '{minAndroidVersion: 8, publishType: $publishType}
+             + (if $whatsNew == "" then {} else {whatsNew: $whatsNew} end)')
+          echo "RuStore draft request body: $BODY"
           RESPONSE=$(curl -s -X POST "https://public-api.rustore.ru/public/v1/application/${PACKAGE_NAME}/version" \
             -H "Content-Type: application/json" \
             -H "Public-Token: ${RUSTORE_JWE}" \
-            -d @- <<EOF
-          {
-            "minAndroidVersion": 8,
-            "publishType": "MANUAL"
-          }
-          EOF
-          )
+            -d "$BODY")
           echo "RuStore draft response: $RESPONSE"
           DRAFT_CODE=$(echo "$RESPONSE" | jq -r '.code // empty')
           MESSAGE=$(echo "$RESPONSE" | jq -r '.message // ""')
