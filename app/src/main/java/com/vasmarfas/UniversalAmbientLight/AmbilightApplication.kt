@@ -10,13 +10,10 @@ import com.vasmarfas.UniversalAmbientLight.common.util.Preferences
 class AmbilightApplication : Application() {
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(LocaleHelper.onAttach(base))
-        // libadb-android (wireless ADB) touches hidden APIs; Android 9+ blocks them by default.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            try {
-                org.lsposed.hiddenapibypass.HiddenApiBypass.addHiddenApiExemptions("L")
-            } catch (_: Throwable) {
-            }
-        }
+        // NOTE: previously called HiddenApiBypass.addHiddenApiExemptions("L") here, but Google
+        // Play rejects the org.lsposed.hiddenapibypass SDK (it breaks on the new ART / Android 16).
+        // Removed. Features relying on blocklisted hidden APIs may degrade on newer Android;
+        // greylisted APIs and the non-ADB capture paths (MediaProjection/accessibility) are unaffected.
     }
 
     override fun onCreate() {

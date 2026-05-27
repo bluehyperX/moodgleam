@@ -3,7 +3,6 @@ agp = "8.13.2"
 appUpdateKtx = "2.1.0"
 conscryptAndroid = "2.5.3"
 dadb = "1.2.10"
-hiddenapibypass = "6.1"
 libadbAndroid = "3.1.1"
 playReview = "2.0.2"
 firebaseBom = "34.8.0"
@@ -40,7 +39,6 @@ app-update = { module = "com.google.android.play:app-update", version.ref = "app
 app-update-ktx = { module = "com.google.android.play:app-update-ktx", version.ref = "appUpdateKtx" }
 conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscryptAndroid" }
 dadb = { module = "dev.mobile:dadb", version.ref = "dadb" }
-hiddenapibypass = { module = "org.lsposed.hiddenapibypass:hiddenapibypass", version.ref = "hiddenapibypass" }
 libadb-android = { module = "com.github.MuntashirAkon:libadb-android", version.ref = "libadbAndroid" }
 play-review = { module = "com.google.android.play:review", version.ref = "playReview" }
 play-review-ktx = { module = "com.google.android.play:review-ktx", version.ref = "playReview" }

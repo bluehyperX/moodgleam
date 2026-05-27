@@ -116,7 +116,6 @@ dependencies {
     implementation(libs.libadb.android)
     implementation(libs.conscrypt.android)
     implementation(libs.sun.security.android)
-    implementation(libs.hiddenapibypass)
     implementation(libs.usb.serial)
 
     implementation(libs.androidx.leanback)
