@@ -8,6 +8,7 @@ import android.os.HandlerThread
 import android.util.Log
 import com.vasmarfas.UniversalAmbientLight.common.network.HyperionThread
 import com.vasmarfas.UniversalAmbientLight.common.util.AdbKeyHelper
+import com.vasmarfas.UniversalAmbientLight.common.util.AdbPortResolver
 import com.vasmarfas.UniversalAmbientLight.common.util.AppOptions
 import com.vasmarfas.UniversalAmbientLight.common.util.ColorProcessor
 import dadb.Dadb
@@ -107,11 +108,14 @@ class AdbEncoder(
     private fun connectAdb() {
         try {
             if (mDadb == null) {
-                Log.i(TAG, "Connecting to ADB local port $mAdbPort...")
                 val keyPair = AdbKeyHelper.getKeyPair(mContext)
+                // dadb can't use the Android 11+ TLS wireless-debugging port; resolve a
+                // dadb-usable plain port (flips adbd to tcpip:5555 over TLS when needed).
+                val port = AdbPortResolver.resolveForDadb(mContext, mAdbPort)
+                Log.i(TAG, "Connecting to ADB local port $port (configured $mAdbPort)...")
                 // Dadb.create blocks until connected or throws
-                mDadb = Dadb.create("127.0.0.1", mAdbPort, keyPair)
-                Log.i(TAG, "ADB connected to localhost:$mAdbPort")
+                mDadb = Dadb.create("127.0.0.1", port, keyPair)
+                Log.i(TAG, "ADB connected to localhost:$port")
             }
         } catch (e: Exception) {
             Log.e(TAG, "ADB connection failed: ${e.message}. Ensure Wireless Debugging is ON.")

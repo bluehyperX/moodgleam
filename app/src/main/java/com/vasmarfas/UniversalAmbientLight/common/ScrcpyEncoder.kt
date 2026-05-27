@@ -8,6 +8,7 @@ import android.media.MediaFormat
 import android.util.Log
 import com.vasmarfas.UniversalAmbientLight.common.network.HyperionThread
 import com.vasmarfas.UniversalAmbientLight.common.util.AdbKeyHelper
+import com.vasmarfas.UniversalAmbientLight.common.util.AdbPortResolver
 import com.vasmarfas.UniversalAmbientLight.common.util.AppOptions
 import com.vasmarfas.UniversalAmbientLight.common.util.ColorProcessor
 import dadb.Dadb
@@ -33,10 +34,20 @@ import kotlin.random.Random
  *   v1.x  – positional args; raw H264 after 68-byte device-info header
  *   v2.x  – key=value args; framed mode: each frame is [8-byte PTS][4-byte len][data]
  *   v3.x  – like v2.x but also requires `scid=XXXXXXXX`; socket name = "scrcpy_XXXXXXXX"
+ *   v4.x  – like v3.x, but the wire protocol changed:
+ *             • video header (codec meta) shrank 12 → 4 bytes (codecId only;
+ *               width/height removed). `send_codec_meta` was renamed to
+ *               `send_stream_meta` (both default true — we don't pass it).
+ *             • a 12-byte "session meta" packet is inserted into the frame stream
+ *               before the config packet and again on every resize:
+ *               [flags(4)][width(4)][height(4)], carrying the current video size.
+ *             • frame flag bits shifted: bit63=session, bit62=config, bit61=key-frame
+ *               (was bit63=config, bit62=key-frame).
  *
- * Frame packets (v2.x/v3.x without raw_stream):
- *   PTS == -1  →  codec config (SPS/PPS); pass with BUFFER_FLAG_CODEC_CONFIG
- *   PTS >= 0   →  normal frame
+ * Frame packets (framed mode, without raw_stream):
+ *   config flag set  →  codec config (SPS/PPS); pass with BUFFER_FLAG_CODEC_CONFIG
+ *   session flag set →  (v4 only) metadata, no payload follows
+ *   otherwise        →  normal frame
  */
 class ScrcpyEncoder(
     private val mContext: Context,
@@ -209,9 +220,13 @@ class ScrcpyEncoder(
             Log.i(TAG, "scrcpy-server version: ${version ?: "unknown (v1.x assumed)"}")
 
             // ── 2. ADB connect ────────────────────────────────────────────
-            Log.i(TAG, "ADB connecting on port $mAdbPort…")
             val kp = AdbKeyHelper.getKeyPair(mContext)
-            dadb = Dadb.create("127.0.0.1", mAdbPort, kp)
+            // dadb can't use the Android 11+ TLS wireless-debugging port, and that port
+            // rotates anyway. Resolve a dadb-usable plain port (flips adbd to tcpip:5555
+            // over the TLS connection when needed).
+            val adbPort = AdbPortResolver.resolveForDadb(mContext, mAdbPort)
+            Log.i(TAG, "ADB connecting on port $adbPort (configured $mAdbPort)…")
+            dadb = Dadb.create("127.0.0.1", adbPort, kp)
             Log.i(TAG, "ADB connected")
 
             // ── 3. Push server every time (avoid stale/corrupted remote binary) ─
@@ -322,21 +337,28 @@ class ScrcpyEncoder(
             }, "scrcpy-watchdog").also { it.isDaemon = true; it.start() }
 
             // ── 6. Read fixed metadata ──────────────────────────────────────
-            // With send_dummy_byte=false + defaults:
-            // - 64 bytes device name (send_device_meta=true)
-            // - 12 bytes codec meta: codecId + width + height (send_codec_meta=true)
+            // With send_dummy_byte=false + defaults (send_device_meta / send_stream_meta = true):
+            // - 64 bytes device name
+            // - stream header (codec meta):
+            //     v2.x/v3.x -> 12 bytes: codecId + width + height
+            //     v4.x      ->  4 bytes: codecId only (size arrives later in a
+            //                   "session meta" packet inside the frame stream)
             val deviceMeta = ByteArray(64)
             readFully(socketInput, deviceMeta)
             val deviceName = String(deviceMeta, Charsets.UTF_8).trimEnd('\u0000')
             lastActivity.set(System.currentTimeMillis())
 
-            val codecMeta = ByteArray(12)
+            val codecMeta = ByteArray(if (major >= 4) 4 else 12)
             readFully(socketInput, codecMeta)
             lastActivity.set(System.currentTimeMillis())
             val codecId = ByteBuffer.wrap(codecMeta, 0, 4).order(ByteOrder.BIG_ENDIAN).getInt()
-            val streamW = ByteBuffer.wrap(codecMeta, 4, 4).order(ByteOrder.BIG_ENDIAN).getInt()
-            val streamH = ByteBuffer.wrap(codecMeta, 8, 4).order(ByteOrder.BIG_ENDIAN).getInt()
-            Log.i(TAG, "Device: '$deviceName', codecId=$codecId, stream=${streamW}x${streamH}")
+            if (major >= 4) {
+                Log.i(TAG, "Device: '$deviceName', codecId=$codecId (v4 stream header; size via session meta)")
+            } else {
+                val streamW = ByteBuffer.wrap(codecMeta, 4, 4).order(ByteOrder.BIG_ENDIAN).getInt()
+                val streamH = ByteBuffer.wrap(codecMeta, 8, 4).order(ByteOrder.BIG_ENDIAN).getInt()
+                Log.i(TAG, "Device: '$deviceName', codecId=$codecId, stream=${streamW}x${streamH}")
+            }
 
             // ── 7. Configure MediaCodec ───────────────────────────────────
             val fmt = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, mCapW, mCapH)
@@ -414,15 +436,31 @@ class ScrcpyEncoder(
 
             // ── Thread 1 (this): read socket → queue ──────────────────────
             if (useFramedMode) {
-                // Framed mode: [8-byte PTS big-endian][4-byte len big-endian][data]
-                // High bits in PTS field are flags:
-                // bit63 = config packet, bit62 = key-frame, remaining bits = pts
+                // Framed mode: [8-byte PTS+flags big-endian][4-byte len big-endian][data]
+                // Flag bits in the PTS field differ by protocol version:
+                //   v2.x/v3.x -> bit63 = config, bit62 = key-frame
+                //   v4.x      -> bit63 = session meta, bit62 = config, bit61 = key-frame
+                // A v4 "session meta" packet carries no payload: the 8-byte field holds
+                // [flags(4)][width(4)] and the 4-byte "len" field holds the height.
+                val isV4 = major >= 4
+                val configMask = if (isV4) (1L shl 62) else Long.MIN_VALUE
+                val ptsMask = if (isV4) 0x1FFFFFFFFFFFFFFFL else 0x3FFFFFFFFFFFFFFFL
                 val metaBuf = ByteArray(12)
-                Log.i(TAG, "Reading in framed mode")
+                Log.i(TAG, "Reading in framed mode (v$major.x)")
                 while (mRunning) {
                     readFully(socketInput, metaBuf)
                     val ptsAndFlags = ByteBuffer.wrap(metaBuf, 0, 8).order(ByteOrder.BIG_ENDIAN).getLong()
                     val frameLen = ByteBuffer.wrap(metaBuf, 8, 4).order(ByteOrder.BIG_ENDIAN).getInt()
+
+                    // v4 session-meta packet (bit63): no payload follows — just the size.
+                    if (isV4 && (ptsAndFlags and Long.MIN_VALUE) != 0L) {
+                        val sessW = (ptsAndFlags and 0xFFFFFFFFL).toInt()
+                        val sessH = frameLen
+                        Log.i(TAG, "Session meta: ${sessW}x$sessH")
+                        lastActivity.set(System.currentTimeMillis())
+                        bytesReceived += 12
+                        continue
+                    }
 
                     if (frameLen <= 0 || frameLen > MAX_FRAME_BYTES) {
                         Log.e(TAG, "Invalid frame length: $frameLen (ptsAndFlags=$ptsAndFlags) — stream likely corrupt")
@@ -434,8 +472,8 @@ class ScrcpyEncoder(
                     lastActivity.set(System.currentTimeMillis())
                     bytesReceived += 12 + frameLen
 
-                    val isConfig = (ptsAndFlags and Long.MIN_VALUE) != 0L
-                    val pts = ptsAndFlags and 0x3FFFFFFFFFFFFFFFL
+                    val isConfig = (ptsAndFlags and configMask) != 0L
+                    val pts = ptsAndFlags and ptsMask
                     val flags = if (isConfig) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0
                     // Backpressure: wait for space so we never lose frames
                     while (mRunning && mFrameQueue.size >= 56) Thread.sleep(4)

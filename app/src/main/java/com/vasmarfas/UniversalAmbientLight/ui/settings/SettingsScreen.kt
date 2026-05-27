@@ -11,6 +11,15 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -46,6 +55,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import dadb.Dadb
 import com.vasmarfas.UniversalAmbientLight.common.util.AdbKeyHelper
+import com.vasmarfas.UniversalAmbientLight.common.util.AppAdbConnectionManager
+import com.vasmarfas.UniversalAmbientLight.common.util.AdbAutoPair
+import com.vasmarfas.UniversalAmbientLight.common.util.openAccessibilitySettings
+import com.vasmarfas.UniversalAmbientLight.common.AccessibilityCaptureService
 import com.vasmarfas.UniversalAmbientLight.common.util.DevOptionsHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -347,7 +360,7 @@ fun SettingsScreen(
                         onValueChange = { newMethod ->
                             if (newMethod == "accessibility") {
                                 // Check if service is already enabled
-                                if (com.vasmarfas.UniversalAmbientLight.common.AccessibilityCaptureService.getInstance() == null) {
+                                if (AccessibilityCaptureService.getInstance() == null) {
                                     // Show disclosure dialog BEFORE applying fully or opening settings
                                     // Note: ListPreference already saved the value to prefs, so we might need to revert if denied
                                     previousCaptureMethod = captureMethod // save old method (which is actually current before update in state)
@@ -514,6 +527,7 @@ fun SettingsScreen(
                         R.string.pref_key_color_brightness_g to R.string.pref_title_color_brightness_g,
                         R.string.pref_key_color_brightness_b to R.string.pref_title_color_brightness_b
                     ).forEach { (keyRes, titleRes) ->
+                        val keyName = stringResource(keyRes)
                         EditTextPreference(
                             prefs = prefs,
                             keyRes = keyRes,
@@ -524,7 +538,7 @@ fun SettingsScreen(
                                 colorPrefsVersion++
                                 AnalyticsHelper.logSettingChanged(
                                     context,
-                                    context.getString(keyRes),
+                                    keyName,
                                     newValue
                                 )
                             }
@@ -535,6 +549,7 @@ fun SettingsScreen(
                         R.string.pref_key_color_gamma_g to R.string.pref_title_color_gamma_g,
                         R.string.pref_key_color_gamma_b to R.string.pref_title_color_gamma_b
                     ).forEach { (keyRes, titleRes) ->
+                        val keyName = stringResource(keyRes)
                         EditTextPreference(
                             prefs = prefs,
                             keyRes = keyRes,
@@ -545,7 +560,7 @@ fun SettingsScreen(
                                 colorPrefsVersion++
                                 AnalyticsHelper.logSettingChanged(
                                     context,
-                                    context.getString(keyRes),
+                                    keyName,
                                     newValue
                                 )
                             }
@@ -752,11 +767,37 @@ fun SettingsScreen(
             onDismissRequest = { showDebugDialog = false },
             title = { Text("Debug Info") },
             text = {
-                SelectionContainer {
-                    Text(
-                        text = debugInfo,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                val scrollState = rememberScrollState()
+                val focusRequester = remember { FocusRequester() }
+                val dpadScope = rememberCoroutineScope()
+                // Grab focus so the D-pad (TV remote) scrolls the content immediately.
+                LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+                Column(
+                    modifier = Modifier
+                        .focusRequester(focusRequester)
+                        .focusable()
+                        .onKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                            when (event.key) {
+                                Key.DirectionDown ->
+                                    if (scrollState.canScrollForward) {
+                                        dpadScope.launch { scrollState.scrollBy(250f) }; true
+                                    } else false
+                                Key.DirectionUp ->
+                                    if (scrollState.canScrollBackward) {
+                                        dpadScope.launch { scrollState.scrollBy(-250f) }; true
+                                    } else false
+                                else -> false
+                            }
+                        }
+                        .verticalScroll(scrollState)
+                ) {
+                    SelectionContainer {
+                        Text(
+                            text = debugInfo,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             },
             confirmButton = {
@@ -914,17 +955,141 @@ fun AdbPairingDialog(
     val scope = rememberCoroutineScope()
     var status by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
+    var pairCode by remember { mutableStateOf("") }
+    var pairPort by remember { mutableStateOf("") }
+
+    var manualExpanded by remember { mutableStateOf(false) }
+    var showAutoPairConsent by remember { mutableStateOf(false) }
 
     val devEnabled = remember { DevOptionsHelper.isDeveloperOptionsEnabled(context) }
     val adbEnabled = remember { DevOptionsHelper.isAdbEnabled(context) }
     val onLabel = stringResource(R.string.adb_status_on)
     val offLabel = stringResource(R.string.adb_status_off)
 
+    // When the user returns after enabling Accessibility (from the auto-pair flow), re-open
+    // the consent dialog so pairing continues without re-tapping the button.
+    val lifecycle = (context as? androidx.lifecycle.LifecycleOwner)?.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME &&
+                AccessibilityCaptureService.consumeAutoPairPending() &&
+                AccessibilityCaptureService.isAvailable()
+            ) {
+                showAutoPairConsent = true
+            }
+        }
+        lifecycle?.addObserver(observer)
+        onDispose { lifecycle?.removeObserver(observer) }
+    }
+
+    // Legacy connect (Android 10 and older, or after `adb tcpip 5555`): plain RSA over TCP.
+    fun runLegacyConnect() {
+        testing = true
+        status = null
+        scope.launch(Dispatchers.IO) {
+            try {
+                val port = prefs.getString(R.string.pref_key_adb_port, "5555")?.toIntOrNull() ?: 5555
+                val keyPair = AdbKeyHelper.getKeyPair(context)
+                val dadb = Dadb.create("127.0.0.1", port, keyPair)
+                dadb.shell("echo ok")
+                dadb.close()
+                withContext(Dispatchers.Main) {
+                    testing = false
+                    status = "✓ ${context.getString(R.string.adb_test_success)}"
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    testing = false
+                    status = String.format(context.getString(R.string.adb_test_failed), e.message ?: "?")
+                }
+            }
+        }
+    }
+
+    // Accessibility-assisted auto pairing. Only runs after explicit consent (see consent dialog).
+    fun runAutoPair() {
+        testing = true
+        status = null
+        scope.launch(Dispatchers.IO) {
+            if (!AccessibilityCaptureService.isAvailable()) {
+                // Ask the service to bounce back to us once the user enables it,
+                // and to re-open the consent dialog so pairing continues automatically.
+                AccessibilityCaptureService.requestReturnToAppOnConnect()
+                AccessibilityCaptureService.markAutoPairPending()
+                withContext(Dispatchers.Main) {
+                    testing = false
+                    status = context.getString(R.string.adb_autopair_need_accessibility)
+                    openAccessibilitySettings(context)
+                    Toast.makeText(
+                        context,
+                        context.getString(
+                            R.string.adb_enable_accessibility_toast,
+                            context.getString(R.string.app_name)
+                        ),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                return@launch
+            }
+            withContext(Dispatchers.Main) {
+                status = context.getString(R.string.adb_autopair_waiting)
+                DevOptionsHelper.openWirelessDebugging(context)
+            }
+            val result = AdbAutoPair.run(context)
+            withContext(Dispatchers.Main) {
+                testing = false
+                status = when (result) {
+                    is AdbAutoPair.Result.Paired ->
+                        "✓ ${context.getString(R.string.adb_pair_success)}"
+                    is AdbAutoPair.Result.NeedsAccessibility ->
+                        context.getString(R.string.adb_autopair_need_accessibility)
+                    is AdbAutoPair.Result.Timeout ->
+                        context.getString(R.string.adb_autopair_timeout)
+                    is AdbAutoPair.Result.Failed ->
+                        String.format(context.getString(R.string.adb_pair_failed), result.message)
+                }
+                status?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+                if (result is AdbAutoPair.Result.Paired) {
+                    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    launch?.addFlags(
+                        android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    )
+                    if (launch != null) try { context.startActivity(launch) } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+
+    if (showAutoPairConsent) {
+        AlertDialog(
+            onDismissRequest = { showAutoPairConsent = false },
+            title = { Text(stringResource(R.string.adb_autopair_consent_title)) },
+            text = { Text(stringResource(R.string.adb_autopair_consent_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAutoPairConsent = false
+                    runAutoPair()
+                }) { Text(stringResource(R.string.adb_autopair_consent_continue)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAutoPairConsent = false }) {
+                    Text(stringResource(R.string.scanner_cancel))
+                }
+            }
+        )
+    }
+
     AlertDialog(
         onDismissRequest = { if (!testing) onDismiss() },
         title = { Text(stringResource(R.string.adb_pair_title)) },
         text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+          Column {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 340.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(
                     text = stringResource(R.string.adb_pair_instruction),
                     style = MaterialTheme.typography.bodySmall
@@ -991,40 +1156,125 @@ fun AdbPairingDialog(
                     }
                 ) { Text(stringResource(R.string.adb_btn_open_wireless_debug)) }
 
+                // Legacy connection FIRST — Android 10 and older, or after `adb tcpip 5555`.
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.adb_legacy_title),
+                    style = MaterialTheme.typography.titleSmall
+                )
                 Spacer(modifier = Modifier.height(4.dp))
-
                 OutlinedButton(
                     enabled = !testing,
                     modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        val port = prefs.getString(R.string.pref_key_adb_port, "5555") ?: "5555"
-                        val cmd = "adb connect 127.0.0.1:$port"
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                        cm?.setPrimaryClip(ClipData.newPlainText("adb command", cmd))
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.adb_toast_command_copied, cmd),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                ) { Text(stringResource(R.string.adb_btn_copy_command)) }
+                    onClick = { runLegacyConnect() }
+                ) { Text(stringResource(R.string.adb_legacy_btn)) }
 
-                if (status != null) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                // Android 11+ pairing: shown below the legacy option. One-time pairing; the
+                // automatic button reads the code via Accessibility (after explicit consent).
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = status!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (status!!.startsWith("✓"))
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.error
+                        text = stringResource(R.string.adb_pair_code_title),
+                        style = MaterialTheme.typography.titleSmall
                     )
-                }
-                if (testing) {
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // One-tap path: shows a consent dialog first, then the app reads the code via
+                    // Accessibility, finds the port via mDNS and pairs without leaving the screen.
+                    OutlinedButton(
+                        enabled = !testing,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { showAutoPairConsent = true }
+                    ) { Text(stringResource(R.string.adb_autopair_btn)) }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    // Manual entry hidden behind a spoiler so it doesn't clutter D-pad navigation.
+                    TextButton(
+                        onClick = { manualExpanded = !manualExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = (if (manualExpanded) "▾ " else "▸ ") +
+                                stringResource(R.string.adb_pair_manual_label)
+                        )
+                    }
+                    if (manualExpanded) {
+                    Text(
+                        text = stringResource(R.string.adb_pair_code_instruction),
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = pairPort,
+                        onValueChange = { pairPort = it.filter { c -> c.isDigit() }.take(5) },
+                        label = { Text(stringResource(R.string.adb_pair_port_hint)) },
+                        singleLine = true,
+                        enabled = !testing,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = pairCode,
+                        onValueChange = { pairCode = it.filter { c -> c.isDigit() }.take(6) },
+                        label = { Text(stringResource(R.string.adb_pair_code_hint)) },
+                        singleLine = true,
+                        enabled = !testing,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedButton(
+                        enabled = !testing && pairCode.length == 6 && pairPort.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            testing = true
+                            status = null
+                            val code = pairCode
+                            val port = pairPort.toIntOrNull() ?: 0
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    val mgr = AppAdbConnectionManager.getInstance(context)
+                                    // adbd's pairing server binds to the LAN IP; fall back to loopback.
+                                    val host = io.github.muntashirakon.adb.android.AndroidUtils.getHostIpAddress(context) ?: "127.0.0.1"
+                                    val ok = mgr.pair(host, port, code)
+                                    withContext(Dispatchers.Main) {
+                                        testing = false
+                                        status = if (ok) "✓ ${context.getString(R.string.adb_pair_success)}"
+                                        else String.format(context.getString(R.string.adb_pair_failed), "?")
+                                    }
+                                } catch (e: Throwable) {
+                                    withContext(Dispatchers.Main) {
+                                        testing = false
+                                        status = String.format(context.getString(R.string.adb_pair_failed), e.message ?: "?")
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        Text(stringResource(if (testing) R.string.adb_pairing else R.string.adb_pair_btn))
+                    }
+                    } // end if (manualExpanded)
                 }
             }
+
+            // Always-visible status + progress, pinned below the scroll area.
+            if (status != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = status!!,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (status!!.startsWith("✓"))
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.error
+                )
+            }
+            if (testing) {
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+          }
         },
         confirmButton = {
             TextButton(
@@ -1035,15 +1285,42 @@ fun AdbPairingDialog(
                     scope.launch(Dispatchers.IO) {
                         try {
                             val port = prefs.getString(R.string.pref_key_adb_port, "5555")?.toIntOrNull() ?: 5555
-                            val keyPair = AdbKeyHelper.getKeyPair(context)
-                            val dadb = Dadb.create("127.0.0.1", port, keyPair)
-                            dadb.shell("echo ok")
-                            dadb.close()
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                // Android 11+: TLS connect (auto-discovers the connect port; falls back to the entered port).
+                                val mgr = AppAdbConnectionManager.getInstance(context)
+                                if (!mgr.isConnected) {
+                                    val auto = try {
+                                        mgr.autoConnect(context, 8000)
+                                    } catch (e: io.github.muntashirakon.adb.AdbPairingRequiredException) {
+                                        throw e
+                                    } catch (_: Exception) {
+                                        false
+                                    }
+                                    if (!auto && port > 0) mgr.connect("127.0.0.1", port)
+                                }
+                                val ok = mgr.isConnected
+                                withContext(Dispatchers.Main) {
+                                    testing = false
+                                    status = if (ok) "✓ ${context.getString(R.string.adb_test_success)}"
+                                    else String.format(context.getString(R.string.adb_test_failed), "not connected")
+                                }
+                            } else {
+                                // Android <= 10: legacy RSA over TCP (port 5555).
+                                val keyPair = AdbKeyHelper.getKeyPair(context)
+                                val dadb = Dadb.create("127.0.0.1", port, keyPair)
+                                dadb.shell("echo ok")
+                                dadb.close()
+                                withContext(Dispatchers.Main) {
+                                    testing = false
+                                    status = "✓ ${context.getString(R.string.adb_test_success)}"
+                                }
+                            }
+                        } catch (e: io.github.muntashirakon.adb.AdbPairingRequiredException) {
                             withContext(Dispatchers.Main) {
                                 testing = false
-                                status = "✓ ${context.getString(R.string.adb_test_success)}"
+                                status = context.getString(R.string.error_adb_pairing_required)
                             }
-                        } catch (e: Exception) {
+                        } catch (e: Throwable) {
                             withContext(Dispatchers.Main) {
                                 testing = false
                                 status = String.format(context.getString(R.string.adb_test_failed), e.message ?: "unknown")

@@ -5,12 +5,17 @@ import android.media.Image
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
+import android.os.Build
 import android.util.Log
+import com.vasmarfas.UniversalAmbientLight.R
 import com.vasmarfas.UniversalAmbientLight.common.network.HyperionThread
 import com.vasmarfas.UniversalAmbientLight.common.util.AdbKeyHelper
+import com.vasmarfas.UniversalAmbientLight.common.util.AdbPortResolver
+import com.vasmarfas.UniversalAmbientLight.common.util.AppAdbConnectionManager
 import com.vasmarfas.UniversalAmbientLight.common.util.AppOptions
 import com.vasmarfas.UniversalAmbientLight.common.util.ColorProcessor
 import dadb.Dadb
+import io.github.muntashirakon.adb.AdbPairingRequiredException
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
@@ -123,8 +128,7 @@ class ScreenrecordEncoder(
      * @return true if the session ended cleanly (stream EOF), false on error.
      */
     private fun runSession(): Boolean {
-        var dadb: Dadb? = null
-        var adbStream: dadb.AdbStream? = null
+        var shell: AdbShell? = null
         var decoder: MediaCodec? = null
         var codecInThread: Thread? = null
         var codecOutThread: Thread? = null
@@ -136,16 +140,13 @@ class ScreenrecordEncoder(
         val bytesReceived = java.util.concurrent.atomic.AtomicLong(0L)
 
         try {
-            Log.i(TAG, "ADB connecting port=$mAdbPort…")
-            val kp = AdbKeyHelper.getKeyPair(mContext)
-            dadb = Dadb.create("127.0.0.1", mAdbPort, kp)
-            Log.i(TAG, "ADB connected")
-
             // Balanced bitrate: fewer compression artifacts than 500k, still lightweight enough.
             val cmd = "shell:screenrecord --output-format=h264 --size ${mCapW}x${mCapH}" +
                     " --bit-rate 1200000 -"
-            Log.i(TAG, "Launching: $cmd")
-            adbStream = dadb.open(cmd)
+            Log.i(TAG, "ADB connecting (api=${Build.VERSION.SDK_INT}, port=$mAdbPort): $cmd")
+            val openedShell = openAdbShell(cmd)
+            shell = openedShell
+            Log.i(TAG, "ADB stream open")
 
             // Configure H.264 decoder
             val fmt = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, mCapW, mCapH)
@@ -185,7 +186,7 @@ class ScreenrecordEncoder(
                     if (mRunning) {
                         codecFailureFlag.set(true)
                         Log.w(TAG, "Codec-in failed (IllegalState), restarting session")
-                        try { adbStream.close() } catch (_: Exception) {}
+                        try { openedShell.close() } catch (_: Exception) {}
                     }
                 } catch (_: InterruptedException) {}
             }, "screenrecord-codec-in").also { it.isDaemon = true; it.start() }
@@ -224,13 +225,13 @@ class ScreenrecordEncoder(
                     if (mRunning) {
                         codecFailureFlag.set(true)
                         Log.w(TAG, "Codec-out failed (IllegalState), restarting session")
-                        try { adbStream.close() } catch (_: Exception) {}
+                        try { openedShell.close() } catch (_: Exception) {}
                     }
                 } catch (_: InterruptedException) {}
             }, "screenrecord-codec-out").also { it.isDaemon = true; it.start() }
 
             // ── Thread 1 (this): read ADB stream into queue ───────────────
-            val inputStream = adbStream.source.inputStream()
+            val inputStream = openedShell.input
             val chunk = ByteArray(16384)
 
             // Watchdog policy:
@@ -250,7 +251,7 @@ class ScreenrecordEncoder(
                             Log.w(TAG, "Watchdog: no input data for 45s, restarting session…")
                         }
                         watchdogFlag.set(true)
-                        try { adbStream.close() } catch (_: Exception) {}
+                        try { openedShell.close() } catch (_: Exception) {}
                         break
                     }
                 }
@@ -292,6 +293,12 @@ class ScreenrecordEncoder(
                 mDataQueue.put(chunk.copyOf(n))
             }
             cleanExit = true
+        } catch (e: AdbPairingRequiredException) {
+            Log.w(TAG, "ADB pairing required")
+            if (mRunning) {
+                onFatalError?.invoke(mContext.getString(R.string.error_adb_pairing_required))
+                mRunning = false
+            }
         } catch (e: Exception) {
             if (mRunning && !watchdogFlag.get() && !codecFailureFlag.get()) {
                 Log.e(TAG, "Session error: ${e.message}")
@@ -316,11 +323,67 @@ class ScreenrecordEncoder(
             // Wait for codec threads to notice the interruption / mRunning=false
             try { Thread.sleep(150) } catch (_: Exception) {}
             try { decoder?.stop(); decoder?.release() } catch (_: Exception) {}
-            try { adbStream?.close() } catch (_: Exception) {}
-            try { dadb?.close() } catch (_: Exception) {}
+            try { shell?.close() } catch (_: Exception) {}
             if (!wasRunning) mCapturing = false
         }
         return cleanExit
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ADB transport: libadb (TLS + pairing) on Android 11+, dadb (RSA) on older
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private interface AdbShell {
+        val input: java.io.InputStream
+        fun close()
+    }
+
+    private fun openAdbShell(cmd: String): AdbShell {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            var mgr: AppAdbConnectionManager? = null
+            try {
+                val m = AppAdbConnectionManager.getInstance(mContext)
+                mgr = m
+                if (!m.isConnected) {
+                    // autoConnect discovers the TLS connect port via mDNS — no manual port needed.
+                    // Throws AdbPairingRequiredException if the key was never paired.
+                    val auto = try {
+                        m.autoConnect(mContext, 8000)
+                    } catch (e: AdbPairingRequiredException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "autoConnect failed: ${e.message}")
+                        false
+                    }
+                    // Fallback to the manually entered port if discovery failed.
+                    if (!auto && mAdbPort > 0) m.connect("127.0.0.1", mAdbPort)
+                }
+                val stream = m.openStream(cmd)
+                return object : AdbShell {
+                    override val input: java.io.InputStream = stream.openInputStream()
+                    override fun close() { try { stream.close() } catch (_: Exception) {} }
+                }
+            } catch (e: AdbPairingRequiredException) {
+                throw e
+            } catch (e: Throwable) {
+                // Includes NoClassDefFoundError etc. — wrap so the session handler treats it gracefully.
+                try { mgr?.disconnect() } catch (_: Throwable) {}
+                throw java.io.IOException("ADB connect failed: ${e.message}", e)
+            }
+        } else {
+            val kp = AdbKeyHelper.getKeyPair(mContext)
+            // This branch only runs on Android <= 10, where the configured RSA port works.
+            val port = AdbPortResolver.resolveForDadb(mContext, mAdbPort)
+            val d = Dadb.create("127.0.0.1", port, kp)
+            val stream = d.open(cmd)
+            return object : AdbShell {
+                override val input: java.io.InputStream = stream.source.inputStream()
+                override fun close() {
+                    try { stream.close() } catch (_: Exception) {}
+                    try { d.close() } catch (_: Exception) {}
+                }
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

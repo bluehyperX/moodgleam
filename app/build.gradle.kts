@@ -112,7 +112,11 @@ dependencies {
     implementation(libs.androidx.preference.ktx)
     implementation(libs.androidx.localbroadcastmanager)
     implementation(libs.flatbuffers.java)
-    implementation("dev.mobile:dadb:1.2.10")
+    implementation(libs.dadb)
+    implementation(libs.libadb.android)
+    implementation(libs.conscrypt.android)
+    implementation(libs.sun.security.android)
+    implementation(libs.hiddenapibypass)
     implementation(libs.usb.serial)
 
     implementation(libs.androidx.leanback)

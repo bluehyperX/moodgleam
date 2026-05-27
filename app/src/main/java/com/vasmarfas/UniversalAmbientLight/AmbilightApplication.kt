@@ -10,6 +10,13 @@ import com.vasmarfas.UniversalAmbientLight.common.util.Preferences
 class AmbilightApplication : Application() {
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(LocaleHelper.onAttach(base))
+        // libadb-android (wireless ADB) touches hidden APIs; Android 9+ blocks them by default.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            try {
+                org.lsposed.hiddenapibypass.HiddenApiBypass.addHiddenApiExemptions("L")
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     override fun onCreate() {

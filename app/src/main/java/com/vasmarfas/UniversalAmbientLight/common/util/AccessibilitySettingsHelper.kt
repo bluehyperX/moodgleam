@@ -21,12 +21,14 @@ fun openAccessibilitySettings(context: Context) {
     )
     val componentKey = component.flattenToString()
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        // Android 13+: deep-link to exact service settings page
-        // Action string is not a public SDK constant, use the raw string
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        // API 31+: deep-link straight to THIS service's detail page.
+        // Action/extra are @hide (no SDK constant), so use the raw strings. The previous
+        // code used a wrong extra key ("accessibility_service") which dumped the user on
+        // the general accessibility list — the correct key is below.
         try {
             val intent = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-            intent.putExtra("accessibility_service", componentKey)
+            intent.putExtra("android.provider.extra.ACCESSIBILITY_DETAILS_SETTINGS", componentKey)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
             return

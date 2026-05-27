@@ -1,6 +1,10 @@
 [versions]
 agp = "8.13.2"
 appUpdateKtx = "2.1.0"
+conscryptAndroid = "2.5.3"
+dadb = "1.2.10"
+hiddenapibypass = "6.1"
+libadbAndroid = "3.1.1"
 playReview = "2.0.2"
 firebaseBom = "34.8.0"
 firebaseCrashlyticsPlugin = "3.0.6"
@@ -12,6 +16,7 @@ constraintlayout = "2.2.1"
 preference = "1.2.1"
 localbroadcastmanager = "1.1.0"
 flatbuffers = "25.2.10"
+sunSecurityAndroid = "1.1"
 usbSerial = "3.7.0"
 leanback = "1.2.0"
 konfetti = "2.0.5"
@@ -33,6 +38,10 @@ androidx-preference-ktx = { group = "androidx.preference", name = "preference-kt
 androidx-localbroadcastmanager = { group = "androidx.localbroadcastmanager", name = "localbroadcastmanager", version.ref = "localbroadcastmanager" }
 app-update = { module = "com.google.android.play:app-update", version.ref = "appUpdateKtx" }
 app-update-ktx = { module = "com.google.android.play:app-update-ktx", version.ref = "appUpdateKtx" }
+conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscryptAndroid" }
+dadb = { module = "dev.mobile:dadb", version.ref = "dadb" }
+hiddenapibypass = { module = "org.lsposed.hiddenapibypass:hiddenapibypass", version.ref = "hiddenapibypass" }
+libadb-android = { module = "com.github.MuntashirAkon:libadb-android", version.ref = "libadbAndroid" }
 play-review = { module = "com.google.android.play:review", version.ref = "playReview" }
 play-review-ktx = { module = "com.google.android.play:review-ktx", version.ref = "playReview" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
@@ -41,6 +50,7 @@ firebase-perf = { module = "com.google.firebase:firebase-perf" }
 firebase-config = { module = "com.google.firebase:firebase-config" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 flatbuffers-java = { group = "com.google.flatbuffers", name = "flatbuffers-java", version.ref = "flatbuffers" }
+sun-security-android = { module = "com.github.MuntashirAkon:sun-security-android", version.ref = "sunSecurityAndroid" }
 usb-serial = { group = "com.github.mik3y", name = "usb-serial-for-android", version.ref = "usbSerial" }
 androidx-leanback = { group = "androidx.leanback", name = "leanback", version.ref = "leanback" }
 androidx-leanback-preference = { group = "androidx.leanback", name = "leanback-preference", version.ref = "leanback" }
