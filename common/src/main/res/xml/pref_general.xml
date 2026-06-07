@@ -90,6 +90,14 @@
             android:positiveButtonText="@null"
             android:title="@string/pref_title_adalight_protocol" />
 
+        <EditTextPreference
+            android:key="@string/pref_key_bluetooth_device"
+            android:summary="@string/pref_summary_bluetooth_device"
+            android:title="@string/pref_title_bluetooth_device"
+            android:maxLines="1"
+            android:selectAllOnFocus="true"
+            android:singleLine="true" />
+
         <!-- WLED Specific -->
         <ListPreference
             android:defaultValue="@string/pref_default_wled_color_order"

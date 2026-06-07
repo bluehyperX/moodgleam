@@ -1,0 +1,344 @@
+package com.bluehyperx.moodgleam.common.network
+
+import android.content.Context
+import android.util.Log
+import com.bluehyperx.moodgleam.R
+import com.bluehyperx.moodgleam.common.ScreenGrabberService
+import com.bluehyperx.moodgleam.common.util.Preferences
+import java.io.IOException
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+
+class HyperionThread(
+    private val mCallback: ScreenGrabberService.HyperionThreadBroadcaster,
+    private val mHost: String,
+    private val mPort: Int,
+    private val mPriority: Int,
+    reconnect: Boolean,
+    delaySeconds: Int,
+    connectionType: String?,
+    private val mContext: Context,
+    private val mBaudRate: Int,
+    wledColorOrder: String?,
+    private val mWledProtocol: String = "ddp",
+    private val mWledRgbw: Boolean = false,
+    private val mWledBrightness: Int = 255,
+    private val mAdalightProtocol: String = "ada",
+    private val mSmoothingEnabled: Boolean = true,
+    private val mSmoothingPreset: String = "balanced",
+    private val mSettlingTime: Int = 200,
+    private val mOutputDelayMs: Long = 80L,
+    private val mUpdateFrequency: Int = 25,
+) : Thread(TAG) {
+
+    private val mReconnectDelayMs: Long = (delaySeconds * 1000).toLong()
+    val mConnectionType: String = connectionType ?: "hyperion"
+    private val mWledColorOrder: String = wledColorOrder ?: "rgb"
+    private val mReconnectEnabled = AtomicBoolean(reconnect)
+    private val mConnected = AtomicBoolean(false)
+    internal val mClient = AtomicReference<HyperionClient?>()
+    private val mExecutor = Executors.newSingleThreadExecutor()
+
+    @Volatile
+    private var mPendingTask: Future<*>? = null
+
+    @Volatile
+    private var mPendingFrame: FrameData? = null
+
+    @Volatile
+    private var mLastSentFrame: FrameData? = null
+    private val mSendLock = Any()
+    private val mKeepAliveExecutor: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor()
+
+    private class FrameData(val data: ByteArray, val width: Int, val height: Int)
+
+    val mListener = object : HyperionThreadListener {
+        override fun sendFrame(data: ByteArray, width: Int, height: Int) {
+            val client = mClient.get()
+            if (client == null || !client.isConnected()) return
+            if (mExecutor.isShutdown) return
+
+            mPendingFrame = FrameData(data, width, height)
+            val pending = mPendingTask
+            if (pending != null && !pending.isDone) {
+                pending.cancel(false)
+            }
+            try {
+                mPendingTask = mExecutor.submit { sendPendingFrame() }
+            } catch (_: RejectedExecutionException) {}
+        }
+
+        override fun sendRawLedData(leds: Array<ColorRgb>) {
+            val client = mClient.get()
+            if (client == null || !client.isConnected()) return
+            if (mExecutor.isShutdown) return
+
+            try {
+                mExecutor.submit {
+                    synchronized(mSendLock) {
+                        client.setRawLedData(leds, mPriority)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        override fun sendScene(sceneId: Int, speed: Int) {
+            val client = mClient.get()
+            if (client == null || !client.isConnected()) return
+            if (mExecutor.isShutdown) return
+
+            try {
+                mExecutor.submit {
+                    synchronized(mSendLock) {
+                        client.setScene(sceneId, speed)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        private fun sendPendingFrame() {
+            val frame = mPendingFrame
+            val client = mClient.get()
+
+            if (frame == null || client == null || !client.isConnected()) return
+
+            try {
+                synchronized(mSendLock) {
+                    client.setImage(
+                        frame.data,
+                        frame.width,
+                        frame.height,
+                        mPriority,
+                        FRAME_DURATION
+                    )
+                }
+                mLastSentFrame = FrameData(frame.data.copyOf(), frame.width, frame.height)
+
+                if (client is HyperionFlatBuffers) {
+                    client.cleanReplies()
+                }
+            } catch (e: IOException) {
+                handleError(e)
+            }
+        }
+
+        override fun clear() {
+            val client = mClient.get()
+            if (client != null && client.isConnected()) {
+                try {
+                    client.clear(mPriority)
+                } catch (e: IOException) {
+                    mCallback.onConnectionError(e.hashCode(), e.message)
+                }
+            }
+        }
+
+        override fun disconnect() {
+            val pending = mPendingTask
+            if (pending != null) {
+                pending.cancel(true)
+                mPendingTask = null
+            }
+            mPendingFrame = null
+            mLastSentFrame = null
+
+            if (!mKeepAliveExecutor.isShutdown) {
+                mKeepAliveExecutor.shutdownNow()
+            }
+
+            if (!mExecutor.isShutdown) {
+                mExecutor.shutdownNow()
+                try {
+                    mExecutor.awaitTermination(SHUTDOWN_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+                } catch (e: InterruptedException) {
+                    currentThread().interrupt()
+                }
+            }
+
+            val client = mClient.getAndSet(null)
+            if (client != null) {
+                try {
+                    client.disconnect()
+                } catch (_: IOException) {}
+            }
+
+            mConnected.set(false)
+        }
+
+        override fun sendStatus(isGrabbing: Boolean) {
+            mCallback.onReceiveStatus(isGrabbing)
+        }
+    }
+
+    val receiver: HyperionThreadListener
+        get() = mListener
+
+    fun resetBlockedIfWLED() {
+        val client = mClient.get()
+        if (client is WLEDClient) {
+            client.resetBlocked()
+        }
+    }
+
+    override fun run() {
+        startKeepAlive()
+        connect()
+    }
+
+    private fun startKeepAlive() {
+        mKeepAliveExecutor.scheduleWithFixedDelay({
+            val client = mClient.get() ?: return@scheduleWithFixedDelay
+            if (!client.isConnected()) return@scheduleWithFixedDelay
+            if (client !is HyperionFlatBuffers) return@scheduleWithFixedDelay
+
+            val last = mLastSentFrame ?: return@scheduleWithFixedDelay
+            try {
+                synchronized(mSendLock) {
+                    client.setImage(last.data, last.width, last.height, mPriority, FRAME_DURATION)
+                }
+                client.cleanReplies()
+            } catch (e: IOException) {
+                handleError(e)
+            }
+        }, KEEPALIVE_PERIOD_MS, KEEPALIVE_PERIOD_MS, TimeUnit.MILLISECONDS)
+    }
+
+    private fun connect() {
+        var connectAttempts = 0
+        while (!isInterrupted) {
+            try {
+                val client = createClient()
+                if (client != null && client.isConnected()) {
+                    mClient.set(client)
+                    mConnected.set(true)
+                    mCallback.onConnected()
+                    Log.i(TAG, "Connected to $mConnectionType at $mHost:$mPort")
+                    return
+                }
+            } catch (e: IOException) {
+                connectAttempts++
+                Log.e(TAG, "Connection failed (attempt $connectAttempts): " + e.message)
+                
+                val isSerial = "bluetooth".equals(mConnectionType, ignoreCase = true) || 
+                               "adalight".equals(mConnectionType, ignoreCase = true)
+                
+                if (!isSerial || connectAttempts > 3) {
+                    mCallback.onConnectionError(e.hashCode(), e.message)
+                }
+            }
+            if (!mReconnectEnabled.get()) return
+            sleepSafe(mReconnectDelayMs)
+        }
+    }
+
+    @Throws(IOException::class)
+    private fun createClient(): HyperionClient? {
+        if (mPort < 1 || mPort > 65535) {
+            throw IOException("Port out of range: $mPort")
+        }
+
+        return if ("wled".equals(mConnectionType, ignoreCase = true)) {
+            WLEDClient(mContext, mHost, mPort, mPriority, mWledColorOrder, mWledProtocol, mSmoothingEnabled, mSmoothingPreset, mSettlingTime, mOutputDelayMs, mUpdateFrequency)
+        } else if ("wiz".equals(mConnectionType, ignoreCase = true)) {
+            WizClient(mHost, mPort)
+        } else if ("adalight".equals(mConnectionType, ignoreCase = true)) {
+            AdalightClient(mContext, mPriority, mBaudRate, mAdalightProtocol, mSmoothingEnabled, mSmoothingPreset, mSettlingTime, mOutputDelayMs, mUpdateFrequency)
+        } else if ("bluetooth".equals(mConnectionType, ignoreCase = true)) {
+            val prefs = Preferences(mContext)
+            val bluetoothDevice = prefs.getString(R.string.pref_key_bluetooth_device, "") ?: ""
+            BluetoothAdalightClient(mContext, mPriority, mBaudRate, bluetoothDevice, mAdalightProtocol, mSmoothingEnabled, mSmoothingPreset, mSettlingTime, mOutputDelayMs, mUpdateFrequency)
+        } else {
+            HyperionFlatBuffers(mHost, mPort, mPriority)
+        }
+    }
+
+    private fun handleError(e: IOException) {
+        mCallback.onConnectionError(e.hashCode(), e.message)
+        if (mReconnectEnabled.get() && mConnected.get()) {
+            sleepSafe(mReconnectDelayMs)
+            try {
+                val newClient = createClient()
+                if (newClient != null && newClient.isConnected()) {
+                    mClient.set(newClient)
+                }
+            } catch (_: IOException) {}
+        }
+    }
+
+    private fun sleepSafe(ms: Long) {
+        try {
+            sleep(ms)
+        } catch (e: InterruptedException) {
+            mReconnectEnabled.set(false)
+            mConnected.set(false)
+            currentThread().interrupt()
+        }
+    }
+
+    fun clearAllImmediate() {
+        val client = mClient.get()
+        if (client != null && client.isConnected()) {
+            try {
+                synchronized(mSendLock) {
+                    client.clearImmediate()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun getConnectedDeviceName(): String? = mClient.get()?.getConnectedDeviceName()
+
+    interface HyperionThreadListener {
+        fun sendFrame(data: ByteArray, width: Int, height: Int)
+        fun sendRawLedData(leds: Array<ColorRgb>)
+        fun sendScene(sceneId: Int, speed: Int = 100)
+        fun clear()
+        fun disconnect()
+        fun sendStatus(isGrabbing: Boolean)
+    }
+
+    companion object {
+        private const val TAG = "HyperionThread"
+        private const val FRAME_DURATION = -1
+        private const val SHUTDOWN_TIMEOUT_MS = 100
+        private const val KEEPALIVE_PERIOD_MS = 1000L
+
+        @JvmStatic
+        fun fromPreferences(
+            callback: ScreenGrabberService.HyperionThreadBroadcaster,
+            context: Context,
+        ): HyperionThread {
+            val prefs = Preferences(context)
+            val host = prefs.getString(R.string.pref_key_host, "") ?: ""
+            val port = prefs.getInt(R.string.pref_key_port, 19400)
+            val priority = prefs.getInt(R.string.pref_key_priority, 100)
+            val reconnect = prefs.getBoolean(R.string.pref_key_reconnect, true)
+            val reconnectDelay = prefs.getInt(R.string.pref_key_reconnect_delay, 5)
+            val connectionType = prefs.getString(R.string.pref_key_connection_type, "hyperion")
+            val baudRate = prefs.getInt(R.string.pref_key_adalight_baudrate, 115200)
+            val wledColorOrder = prefs.getString(R.string.pref_key_wled_color_order, "rgb")
+            val wledProtocol = prefs.getString(R.string.pref_key_wled_protocol, "ddp") ?: "ddp"
+            val wledRgbw = prefs.getBoolean(R.string.pref_key_wled_rgbw, false)
+            val wledBrightness = prefs.getInt(R.string.pref_key_wled_brightness, 255)
+            val adalightProtocol = prefs.getString(R.string.pref_key_adalight_protocol, "ada") ?: "ada"
+            val smoothingEnabled = prefs.getBoolean(R.string.pref_key_smoothing_enabled, false)
+            val smoothingPreset = prefs.getString(R.string.pref_key_smoothing_preset, "off") ?: "off"
+            val settlingTime = prefs.getInt(R.string.pref_key_settling_time, 50)
+            val outputDelayMs = prefs.getInt(R.string.pref_key_output_delay, 0).toLong()
+            val updateFrequency = prefs.getInt(R.string.pref_key_update_frequency, 60)
+
+            return HyperionThread(
+                callback, host, port, priority, reconnect, reconnectDelay,
+                connectionType, context, baudRate, wledColorOrder,
+                wledProtocol, wledRgbw, wledBrightness, adalightProtocol,
+                smoothingEnabled, smoothingPreset, settlingTime, outputDelayMs, updateFrequency
+            )
+        }
+    }
+}

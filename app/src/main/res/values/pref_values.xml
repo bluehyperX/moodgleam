@@ -63,6 +63,9 @@
     <string name="pref_key_adalight_baudrate" translatable="false">pref_key_adalight_baudrate</string>
     <integer name="pref_default_adalight_baudrate" translatable="false">115200</integer>
 
+    <string name="pref_key_bluetooth_device" translatable="false">pref_key_bluetooth_device</string>
+    <string name="pref_default_bluetooth_device" translatable="false"></string>
+
     <string name="pref_key_wled_color_order" translatable="false">pref_key_wled_color_order</string>
     <string name="pref_default_wled_color_order" translatable="false">rgb</string>
 
@@ -166,6 +169,43 @@
     <string name="pref_key_capture_source" translatable="false">pref_key_capture_source</string>
     <string name="pref_default_capture_source" translatable="false">screen</string>
 
+    <string name="pref_key_current_effect" translatable="false">pref_key_current_effect</string>
+    <string name="pref_default_current_effect" translatable="false">rainbow</string>
+
+    <string name="pref_key_current_music_effect" translatable="false">pref_key_current_music_effect</string>
+    <string name="pref_default_current_music_effect" translatable="false">vu_meter</string>
+
+    <string name="pref_key_music_capture_method" translatable="false">pref_key_music_capture_method</string>
+    <string name="pref_default_music_capture_method" translatable="false">mic</string>
+
+    <string name="pref_key_music_sampling_rate" translatable="false">pref_key_music_sampling_rate</string>
+    <string name="pref_default_music_sampling_rate" translatable="false">22050</string>
+
+    <string name="pref_key_music_sample_step" translatable="false">pref_key_music_sample_step</string>
+    <string name="pref_default_music_sample_step" translatable="false">4</string>
+
+    <string name="pref_key_effect_color" translatable="false">pref_key_effect_color</string>
+    <string name="pref_key_effect_speed" translatable="false">pref_key_effect_speed</string>
+    <string name="pref_default_effect_speed" translatable="false">50</string>
+
+    <string name="pref_key_music_weight_bass" translatable="false">pref_key_music_weight_bass</string>
+    <string name="pref_default_music_weight_bass" translatable="false">2.5</string>
+
+    <string name="pref_key_music_weight_mid" translatable="false">pref_key_music_weight_mid</string>
+    <string name="pref_default_music_weight_mid" translatable="false">1.5</string>
+
+    <string name="pref_key_music_weight_high" translatable="false">pref_key_music_weight_high</string>
+    <string name="pref_default_music_weight_high" translatable="false">3.0</string>
+
+    <string name="pref_key_music_threshold_bass_mid" translatable="false">pref_key_music_threshold_bass_mid</string>
+    <string name="pref_default_music_threshold_bass_mid" translatable="false">1200</string>
+
+    <string name="pref_key_music_threshold_mid_high" translatable="false">pref_key_music_threshold_mid_high</string>
+    <string name="pref_default_music_threshold_mid_high" translatable="false">8000</string>
+
+    <string name="pref_key_music_sensitivity" translatable="false">pref_key_music_sensitivity</string>
+    <string name="pref_default_music_sensitivity" translatable="false">50</string>
+
     <string name="pref_key_camera_corners" translatable="false">pref_key_camera_corners</string>
 
     <!-- Capture Method -->
@@ -221,4 +261,29 @@
     <integer name="pref_default_border_threshold" translatable="false">18</integer>
     <string name="pref_key_border_check_interval" translatable="false">pref_key_border_check_interval</string>
     <integer name="pref_default_border_check_interval" translatable="false">60</integer>
+
+    <!-- WiZ settings -->
+    <string name="pref_key_wiz_scenes_enabled" translatable="false">pref_key_wiz_scenes_enabled</string>
+    <bool name="pref_default_wiz_scenes_enabled" translatable="false">true</bool>
+
+    <string name="pref_key_music_use_wiz_background" translatable="false">pref_key_music_use_wiz_background</string>
+    <bool name="pref_default_music_use_wiz_background" translatable="false">false</bool>
+
+    <string name="pref_key_wiz_background_ip" translatable="false">pref_key_wiz_background_ip</string>
+    <string name="pref_default_wiz_background_ip" translatable="false"></string>
+
+    <string name="pref_key_wiz_brightness" translatable="false">pref_key_wiz_brightness</string>
+    <string name="pref_default_wiz_brightness" translatable="false">100</string>
+
+    <string name="pref_key_wiz_background_mode" translatable="false">pref_key_wiz_background_mode</string>
+    <string name="pref_default_wiz_background_mode" translatable="false">frequency</string>
+
+    <string name="pref_key_wiz_calib_r" translatable="false">pref_key_wiz_calib_r</string>
+    <string name="pref_default_wiz_calib_r" translatable="false">1.0</string>
+
+    <string name="pref_key_wiz_calib_g" translatable="false">pref_key_wiz_calib_g</string>
+    <string name="pref_default_wiz_calib_g" translatable="false">1.0</string>
+
+    <string name="pref_key_wiz_calib_b" translatable="false">pref_key_wiz_calib_b</string>
+    <string name="pref_default_wiz_calib_b" translatable="false">1.0</string>
 </resources>

@@ -22,7 +22,7 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.vasmarfas.UniversalAmbientLight" />
+                  <option name="appId" value="com.bluehyperx.moodgleam" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
@@ -36,7 +36,7 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.vasmarfas.UniversalAmbientLight" />
+                  <option name="appId" value="com.bluehyperx.moodgleam" />
                   <option name="mobileSdkAppId" value="1:1056937144949:android:02ca576c9d5367faa73e3c" />
                   <option name="projectId" value="universal-ambient-light" />
                   <option name="projectNumber" value="1056937144949" />

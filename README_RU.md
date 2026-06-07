@@ -1,10 +1,13 @@
-<img width="1280" height="640" alt="Universal Ambient Light" src="app/src/main/res/drawable/banner.png" />
+<img width="1280" height="640" alt="moodgleam" src="app/src/main/res/drawable/banner.png" />
 
-# Universal Ambient Light
+# moodgleam
 
 **Универсальное приложение для фоновой подсветки экрана (Ambilight) на устройствах Android**
 
-Universal Ambient Light — это современное Android-приложение, которое анализирует изображение на экране в реальном времени и передает данные на LED-контроллеры для создания эффекта фоновой подсветки (Ambilight). Приложение полностью совместимо с Android 8.0+ и поддерживает работу как на смартфонах/планшетах, так и на Android TV.
+> [!NOTE]
+> Это форк проекта [Universal Ambient Light](https://github.com/vasmarfas/universal-ambient-light), изначально созданного [vasmarfas](https://github.com/vasmarfas).
+
+moodgleam — это современное Android-приложение, которое анализирует изображение на экране в реальном времени и передает данные на LED-контроллеры для создания эффекта фоновой подсветки (Ambilight). Приложение полностью совместимо с Android 8.0+ и поддерживает работу как на смартфонах/планшетах, так и на Android TV.
 
 **🇬🇧 [Read in English / Читать на английском](README.md)**
 
@@ -47,15 +50,15 @@ Universal Ambient Light — это современное Android-приложе
 ## 🚀 Установка
 
 ### Из релизов GitHub
-Актуальные версии приложения (**TV** и **Mobile**) доступны на [странице релизов](https://github.com/vasmarfas/universal-ambient-light/releases).
+Актуальные версии приложения (**TV** и **Mobile**) доступны на [странице релизов](https://github.com/bluehyperX/moodgleam/releases).
 
-### [Google Play](https://play.google.com/store/apps/details?id=com.vasmarfas.UniversalAmbientLight)
+### [Google Play](https://play.google.com/store/apps/details?id=com.bluehyperx.moodgleam)
 
-### [RuStore](https://www.rustore.ru/catalog/app/com.vasmarfas.UniversalAmbientLight)
+### [RuStore](https://www.rustore.ru/catalog/app/com.bluehyperx.moodgleam)
 
 ### Экспериментальная сборка: поддержка внешних USB-камер
 Экспериментальная сборка с **поддержкой внешних USB-камер (UVC)** доступна для продвинутых настроек — для устройств, где захват экрана ограничен или не оптимален. Эта версия использует userspace-драйверы и распространяется вне Google Play.  
-**Ранний доступ для подписчиков:** [Boosty — Experimental Build: External USB Camera Support](https://boosty.to/vasmarfas/posts/ba545975-558f-496f-bb3f-d181349f447c)
+**Ранний доступ для подписчиков:** [Boosty — Experimental Build: External USB Camera Support](https://boosty.to/bluehyperX/posts/ba545975-558f-496f-bb3f-d181349f447c)
 
 ## ⚙️ Настройка
 
@@ -192,7 +195,7 @@ WS2812B GND  → GND Arduino
 На устройствах TCL агрессивный менеджер задач может "убивать" фоновый сервис.
 **Решение:**
 1. Откройте **Настройки > Приложения > Специальный доступ > Автозапуск**.
-2. Разрешите автозапуск для Universal Ambient Light.
+2. Разрешите автозапуск для moodgleam.
 3. Либо через **"Центр безопасности"** (Safety Guard) добавьте приложение в исключения.
 
 ### Воспроизведение 4K/HDR контента

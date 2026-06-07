@@ -2,7 +2,7 @@
 
 **Effective Date:** 2026-01-26
 
-**Universal Ambient Light** ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our mobile application (the "Service").
+**moodgleam** ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our mobile application (the "Service").
 
 ## 1. Information Collection and Use
 
@@ -58,5 +58,5 @@ We may update our Privacy Policy from time to time. Thus, you are advised to rev
 
 If you have any questions or suggestions about our Privacy Policy, do not hesitate to contact us.
 
-**Developer:** vasmarfas
-**Contact:** https://github.com/vasmarfas/universal-ambient-light/issues
+**Developer:** bluehyperX (fork of Universal Ambient Light by vasmarfas)
+**Contact:** https://github.com/bluehyperX/moodgleam/issues

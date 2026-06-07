@@ -7,7 +7,7 @@
     <item>30 fps</item>
     <item>60 fps</item>
   </string-array>
-  <string name="app_name">Universal Ambient Light</string>
+  <string name="app_name">moodgleam</string>
   <string name="pref_title">Настройки</string>
   <string name="enabled">Включено</string>
   <string name="disabled">Выключено</string>
@@ -209,7 +209,7 @@
   <string name="adb_toast_cannot_open_dev">Не удалось открыть настройки разработчика на этом устройстве</string>
   <string name="adb_toast_cannot_open_wireless">Не удалось открыть Отладку по Wi-Fi на этом устройстве</string>
   <string name="adb_toast_command_copied">Скопировано: %1$s</string>
-  <string name="accessibility_enable_prompt">Пожалуйста, включите Специальные возможности для Universal Ambient Light</string>
+  <string name="accessibility_enable_prompt">Пожалуйста, включите Специальные возможности для moodgleam</string>
 
   <string name="pref_group_capturing">Захват</string>
   <string name="pref_title_framerate">Частота захвата</string>
@@ -298,7 +298,7 @@
   <string name="error_adalight_unreachable">Не удалось подключиться к Adalight. Убедитесь: 1) Устройство подключено через USB OTG, 2) Разрешение USB предоставлено, 3) Верная скорость (baud rate)</string>
   <string name="error_connection_lost">Связь с сервером потеряна, остановка захвата</string>
   <string name="error_adalight_connection_lost">Связь с Adalight потеряна, остановка захвата</string>
-  <string name="error_foreground_blocked">Это устройство блокирует фоновый захват экрана. Разрешите Universal Ambient Light работу в фоне или автозапуск</string>
+  <string name="error_foreground_blocked">Это устройство блокирует фоновый захват экрана. Разрешите moodgleam работу в фоне или автозапуск</string>
   <string name="error_media_projection_denied">В доступе к экрану отказано. Пожалуйста, разрешите доступ при запросе</string>
   <string name="error_screen_recording_not_available">Запись экрана недоступна на этом устройстве</string>
   <string name="toast_must_give_permission">Необходимо разрешение на запись экрана.</string>
@@ -311,7 +311,7 @@
   <string name="url_dialog_open_link">Открыть ссылку</string>
   <string name="help_readme_url">https://github.com/vasmarfas/universal-ambient-light/blob/master/README_RU.md</string>
   <string name="support_url">https://github.com/vasmarfas/universal-ambient-light/blob/master/SUPPORT.md</string>
-  <string name="notification_channel_label">Уведомления Universal Ambient Light</string>
+  <string name="notification_channel_label">Уведомления moodgleam</string>
   <string name="notification_description">Идет захват содержимого экрана</string>
   <string name="pref_title_use_avg_color">Средний цвет экрана</string>
   <string name="pref_summary_use_avg_color">Отправлять один средний цвет вместо всего изображения</string>
@@ -456,9 +456,9 @@
   <string name="guidedstep_nevermind">Неважно</string>
   <string name="guidedstep_cancel">Отмена</string>
   <string name="guidedstep_required">Требуется</string>
-  <string name="toggle_activity_label">Universal Ambient Light (Переключатель)</string>
+  <string name="toggle_activity_label">moodgleam (Переключатель)</string>
   <string name="settings">Настройки</string>
-  <string name="quick_tile_label">Universal Ambient Light</string>
+  <string name="quick_tile_label">moodgleam</string>
   <string name="quick_tile_toast_setup_required">Сначала выполните настройку в приложении</string>
   <string name="status_grabber_running">Сервис подсветки запущен</string>
   <string name="foreground_service_media_projection_justification">Это приложение использует сервис MediaProjection для захвата содержимого экрана в реальном времени и отправки цветовых данных на LED контроллеры для создания эффектов подсветки.</string>
@@ -473,16 +473,8 @@
   <string name="support_open_details">Подробнее</string>
   <string name="report_issue">Сообщить о проблеме</string>
   <string name="report_issue_summary">Сообщить об ошибке или предложить функцию</string>
-  <string name="leave_review">Оставить отзыв</string>
-  <string name="leave_review_summary">Оценить приложение в Google Play</string>
-  <string name="rating_dialog_title">Оцените Universal Ambient Light</string>
-  <string name="rating_dialog_message">Как бы вы оценили свой опыт использования?</string>
-  <string name="rating_dialog_low_rating_title">Нам жаль это слышать</string>
-  <string name="rating_dialog_low_rating_message">Если вы столкнулись с какими-либо проблемами, пожалуйста, сообщите нам об этом на GitHub. Ваш отзыв помогает нам улучшить приложение.</string>
-  <string name="rating_dialog_report_issue">Сообщить о проблеме</string>
-  <string name="rating_dialog_cancel">Отмена</string>
   <string name="github_issues_url">https://github.com/vasmarfas/universal-ambient-light/issues</string>
-  <string name="accessibility_service_description">Allow Universal Ambient Light to capture screen content for ambient lighting.</string>
+  <string name="accessibility_service_description">Allow moodgleam to capture screen content for ambient lighting.</string>
   <string name="accessibility_disclosure_title">Требуется разрешение специальных возможностей</string>
   <string name="accessibility_disclosure_message">Это приложение использует API специальных возможностей (AccessibilityService API) для захвата содержимого экрана. Это необходимо для анализа цветов на экране и синхронизации фоновой подсветки (Ambilight) в реальном времени.\n\nДанные экрана обрабатываются локально на вашем устройстве, никуда не сохраняются и не передаются третьим лицам.\n\nЕсли вы не согласны, вы не сможете использовать этот режим захвата.</string>
   <string name="accessibility_disclosure_button_deny">Отказать</string>

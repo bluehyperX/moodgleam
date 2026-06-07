@@ -1,239 +1,66 @@
-<img width="1280" height="640" alt="Universal Ambient Light" src="app/src/main/res/drawable/banner.png" />
+<img width="1280" height="640" alt="moodgleam" src="app/src/main/res/drawable/banner.png" />
 
-# Universal Ambient Light
+# moodgleam
 
-**Universal application for creating ambient screen lighting on Android devices**
+**moodgleam** is a sophisticated, privacy-respecting Android application (Mobile & TV) designed to synchronize your screen, and music with your ambient lighting setup. 
 
-Universal Ambient Light is a modern Android application that captures screen content in real-time and sends it to LED controllers to create an immersive ambient lighting experience. The application is fully compatible with Android 8.0+ and supports both mobile devices and Android TV.
-
-**🇷🇺 [Read in Russian / Читать на русском](README_RU.md)**
-
-**❤️ Support the project:** if you'd like to support further development, please see [`SUPPORT.md`](SUPPORT.md).
-**📄 Third-party licenses:** see [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+> **Fork Notice**: This project is a heavily expanded fork of [Universal Ambient Light](https://github.com/vasmarfas/universal-ambient-light) originally created by vasmarfas. 
 
 ## ✨ Key Features
 
-- 🎨 **Universal Controller Support**: Compatible with Hyperion, WLED, and Adalight.
-- 📱 **Android TV & Mobile Optimized**: Dedicated interfaces for touchscreens and D-pad navigation.
-- 📷 **Camera Capture Mode**: Alternative capture method using device camera with perspective correction for TVs without screen capture support.
-- 🔄 **Auto-Discovery**: Automatically scans the local network for available LED servers.
-- ⚙️ **Flexible Configuration**: Adjustable capture quality, frame rate, color smoothing, and latency settings.
-- 🚀 **Auto-Start**: Automatically launches the service on device boot.
-- 🔌 **Auto-Reconnect**: Robust connection handling with automatic reconnection attempts.
-- 📊 **Average Color Mode**: Reduces CPU/Network load by analyzing and sending the dominant screen color.
-- 🎯 **Quick Access**: Quick Settings Tile for instant toggling.
+### 📺 Visual Synchronization
+*   **Screen Capture**: Capture your device's screen using standard Android MediaProjection, Accessibility APIs, local ADB, or Root (Screencap) to bypass DRM restrictions.
+*   **Camera Capture**: Point your device's camera at an external TV or monitor and use perspective-correction to drive your LED strip.
+*   **Black Bar Detection**: Automatically detects letterboxing in movies and focuses the capture area on the actual content.
 
-## 🎯 Supported Controllers
+### 🎵 Music Mode & Audio Sync (New!)
+*   **Audio Visualizers**: Transform your living room into a concert with built-in visualizers including VU Meter, Pulse, Frequency Analyzer, Waterfall, Spectrogram, and Neon Trails.
+*   **Configurable Frequencies**: Total control over the audio mapping. Adjust the frequency boundaries to perfectly isolate the Bass (Red), Mids (Green), and Highs (Blue) to match your music genre.
+*   **Sensitivity & Weight**: Fine-tune how aggressively the lights react to audio peaks.
 
-### Hyperion
-- Full Hyperion protocol support.
-- Message priority configuration.
-- Compatible with all Hyperion NG versions.
+### 💡 Standalone Effects (New!)
+*   Don't want to capture the screen or listen to music? Run standalone, on-device procedural effects like Rainbow, Sunset, Ocean, Aurora, Breathing, and Knight Rider directly to your lights.
 
-### WLED
-- Supports **DDP** (recommended for WLED 0.11+) and **UDP Raw** protocols.
-- configurable color order (RGB, GRB, BRG, etc.).
-- RGBW LED support.
-- Brightness control.
+### 🔌 Protocol & Hardware Support
+*   **Hyperion**: FlatBuffers over TCP.
+*   **WLED**: DDP and UDP Raw support.
+*   **Adalight (USB & Bluetooth)**: Connect directly to Arduino/ESP boards via USB OTG (Serial) or wirelessly via Bluetooth SPP.
+*   **WiZ Smart Bulbs (New!)**: Full local network support for WiZ bulbs.
 
-### Adalight
-- Supports **ADA**, **LBAPA** (LightBerry APA102), and **AWA** (Hyperserial) protocols.
-- Configurable Baud Rate.
-- USB OTG connection support.
+### 👯 Dual Device Sync (New!)
+*   Sync an Adalight LED strip and a WiZ background bulb simultaneously during Music Mode.
+*   **WiZ Sync Modes**: Choose between *Frequency-Reactive* (bulb flashes independently to audio) or *LED Average* (bulb acts as a massive Ambilight extension, matching the total color of the LED strip).
+*   **Hardware Calibration**: Independent Red/Green/Blue multipliers and a dedicated brightness boost specifically for the WiZ bulb, allowing you to perfectly match its color temperature to your main LED strip.
 
-## 📋 Requirements
+## 🛡️ Privacy & FOSS 
 
-- Android 8.0 (API 26) or higher.
-- Screen Capture permission (MediaProjection).
-- Local network access (for Hyperion/WLED) or USB Host support (for Adalight).
+**moodgleam** is a 100% Free and Open Source Software (FOSS) project.
+*   **Zero Tracking**: All proprietary dependencies, including Google Play Services, Firebase Analytics, and Crashlytics have been completely purged.
+*   **No Internet Required**: All lighting protocols (Hyperion, WLED, WiZ, Adalight) operate entirely on your local network or via direct Bluetooth/USB connection.
+*   **Manual Bug Reporting**: A privacy-respecting "Report Bug" tool generates a pre-filled GitHub issue template, empowering users to share technical details without automated telemetry.
 
-## 🚀 Installation
+## 🚀 Installation & Building
 
-### From GitHub Releases
-The latest versions (**TV** and **Mobile**) can be downloaded from the [Releases Page](https://github.com/vasmarfas/universal-ambient-light/releases).
+Since this project contains no proprietary blobs, you can easily build it from source using the standard Gradle wrapper:
 
-### [Google Play](https://play.google.com/store/apps/details?id=com.vasmarfas.UniversalAmbientLight)
+```bash
+# Clone the repository
+git clone https://github.com/bluehyperX/moodgleam.git
+cd moodgleam
 
-### [RuStore](https://www.rustore.ru/catalog/app/com.vasmarfas.UniversalAmbientLight)
+# Build the debug APK
+./gradlew assembleDebug
 
-### Experimental: External USB Camera Support
-An experimental build with **external USB camera (UVC) support** is available for advanced setups — for devices where screen capture is limited or not optimal. This version uses userspace drivers and is distributed outside Google Play.  
-**Early access for supporters:** [Boosty — Experimental Build: External USB Camera Support](https://boosty.to/vasmarfas/posts/ba545975-558f-496f-bb3f-d181349f447c)
-
-## ⚙️ Configuration
-
-### 1. Connection
-1. Launch the app and open **Settings**.
-2. Select **Connection Type**: Hyperion, WLED, or Adalight.
-3. Enter the IP/Port (for network controllers) or configure USB settings.
-
-### 2. LED Configuration
-- **Per-Side LED Configuration**: You can configure each side separately:
-    - Top: 60 LEDs (default)
-    - Right: 34 LEDs (default)
-    - Bottom: 60 LEDs (default)
-    - Left: 34 LEDs (default)
-- **LED Layout**: Configure starting corner, direction (clockwise/counterclockwise), and enable/disable individual sides.
-
-### 3. Capture Settings
-- **Capture Source**: Choose between **Screen** (default) or **Camera** mode.
-    - *Screen*: Standard screen capture using MediaProjection API (requires screen capture permission).
-    - *Camera*: Alternative method using device camera with perspective correction. Ideal for TVs that don't support screen capture or for external phone setups.
-- **Capture Rate (FPS)**: Default 30 FPS (options: 10, 15, 24, 30, 60).
-- **Capture Quality**:
-    - *Low (64px)* — For low-end devices or to reduce latency.
-    - *Medium (128px)* — Balanced (Default, Recommended).
-    - *High (256px)* — For powerful devices only.
-    - *Ultra (512px)* — Maximum quality for high-end devices.
-- **Send Average Color**: Enable for maximum performance (sends a single color for the whole strip).
-
-### 3.1. Camera Mode Setup
-When using **Camera** as the capture source:
-1. Grant **Camera** permission when prompted.
-2. Open **Settings** → **Camera Corner Setup**.
-3. Position your device so the camera can see the TV screen.
-4. Drag the four corner markers (TL, TR, BR, BL) to match the edges of your TV screen.
-5. Tap **Save** to store the corner positions.
-6. The app will use these corners for perspective correction during capture.
-
-**Tips:**
-- Use the live preview on the main screen to calibrate your device position before starting capture.
-- Ensure good lighting so the camera can clearly see the TV screen.
-- The corner adjustment helps compensate for non-square camera placement relative to the TV.
-
-### 4. Smoothing
-- **Enable Smoothing**: Enabled by default. Reduces LED flickering.
-- **Preset**: "Balanced" (default). Options: Off, Responsive, Balanced, Smooth.
-- **Settling Time**: 200 ms (default, range: 50-500 ms).
-- **Output Delay**: 2 frames (default, range: 0-10).
-- **Update Frequency**: 25 Hz (default, options: 20, 25, 30, 40, 50, 60 Hz).
-
-### 5. Launch
-1. Grant **Screen Capture / Casting** permission when prompted.
-2. Toggle the button to start the grabber.
-
----
-
-### Controller-Specific Details
-
-#### Hyperion
-- **Host/Port**: Server IP and port (default `19400`).
-- **Priority**: `100` (default).
-- [Hyperion Documentation](https://docs.hyperion-project.org/)
-
-#### WLED
-- **Host**: Controller IP.
-- **Port**: `4048` (DDP) or `19446` (UDP Raw).
-- **Protocol**: DDP (Preferred).
-- **Color Order**: Ensure this matches your WLED settings (e.g., GRB for WS2812B).
-- [WLED Documentation](https://kno.wled.ge/)
-
-#### Adalight (USB)
-- **Baud Rate**: `115200` (default) or match your firmware.
-- **Protocol**: ADA (Standard Arduino), LBAPA (APA102), AWA.
-- [Adalight Repository](https://github.com/adafruit/Adalight)
-
-##### Arduino Sketch for Adalight
-
-A ready-to-use Arduino sketch compatible with the app is available in [`adalight-sketch.ino`](adalight-sketch/adalight-sketch.ino).
-
-**Quick Start:**
-
-1. **Install FastLED library:**
-    - In Arduino IDE: `Tools` → `Manage Libraries` → search for "FastLED" → install
-
-2. **Configure the sketch:**
-    - Open `adalight-sketch/adalight-sketch.ino`
-    - Modify constants at the top of the file:
-        - `DATA_PIN` — pin for LED strip connection (default 6)
-        - `NUM_LEDS` — number of LEDs in the strip (must match app settings!)
-        - `LED_TYPE` — LED strip type (WS2812B, WS2811, SK6812, etc.)
-        - `COLOR_ORDER` — color order (GRB for WS2812B, RGB for others)
-        - `BRIGHTNESS` — brightness (0-255)
-
-3. **Wiring:**
-    - LED strip DATA → Arduino pin (default 6)
-    - LED strip VCC → 5V Arduino (or external power supply for long strips)
-    - LED strip GND → GND Arduino
-    - ⚠️ **Important:** For long strips (>10 leds), use an external 5V power supply!
-
-4. **Upload sketch:**
-    - Connect Arduino to computer via USB
-    - Select board and port in Arduino IDE
-    - Upload the sketch
-
-5. **Connect to Android:**
-    - Disconnect Arduino from computer
-    - Connect Arduino to Android device via USB OTG cable
-    - In the app, select connection type: **Adalight**
-    - Set Baud Rate: **115200**
-    - Select protocol: **ADA**
-    - Ensure LED count in the app matches `NUM_LEDS` in the sketch
-
-**WS2812B Wiring Example:**
-```
-WS2812B DATA → Pin 6 Arduino
-WS2812B VCC  → 5V Arduino (or external 5V)
-WS2812B GND  → GND Arduino
+# Build the release APK
+./gradlew assembleRelease
 ```
 
-**For other LED types:**
-- **APA102 (SPI)**: Use FastLED library with `APA102` configuration and **LBAPA** protocol in the app
-- **WS2811**: Similar to WS2812B, usually `COLOR_ORDER = RGB`
-- **SK6812**: Similar to WS2812B, usually `COLOR_ORDER = GRB`
+The compiled APKs will be located in `app/build/outputs/apk/`.
 
-**Troubleshooting:**
-- If LEDs don't light up: check wiring, ensure `NUM_LEDS` matches in sketch and app
-- If colors are wrong: change `COLOR_ORDER` (try RGB, GRB, BRG)
-- If no data received: check Baud Rate (should be 115200), ensure USB OTG cable supports data transfer
+## ⚖️ License
 
-## 📱 Android TV Features
-This application is fully optimized for Android TV, including support for the Leanback Launcher and D-pad navigation. For easier text entry (IP addresses), we recommend using the "Google TV" or "Android TV Remote" app on your phone.
+This project is licensed under the **PolyForm Noncommercial License 1.0.0**. 
 
-## ⚠️ Important Notes
+You are free to use, modify, and distribute the software for any noncommercial purpose. Commercial use (including using the software to provide a paid service, generate revenue, or within a commercial organization) is strictly prohibited without explicit permission. See the `LICENSE.txt` file for full details.
 
-### TCL TV Users
-On TCL devices, aggressive system battery optimization may kill background services.
-**Solution:**
-1. Go to **Settings > Apps > Special App Access > Auto-Start**.
-2. Enable Auto-Start for Universal Ambient Light.
-3. Alternatively, check the "Safety Guard" app and add the app to exceptions.
-
-### High-Quality Video Playback (4K/HDR)
-Playback issues with high-quality video (2K/4K/HDR) while the ambient light is active are a hardware limitation of many TVs. Built-in processors often cannot handle simultaneous heavy video decoding and screen capturing. This is a deep-seated issue that is rarely fixable via software.
-
-**If you experience video stuttering or lag:**
-1. Lower the video playback quality to 1080p or 720p (depending on your TV's capabilities).
-2. Or completely disable the ambient light application while watching high-resolution content.
-3. You can try adjusting capture quality and FPS settings, but it is unlikely to fully solve the issue.
-
-**Black preview on 4K (Jellyfin, Kodi, mpv, …):**
-If your Hyperion/WLED/HyperHDR preview shows a black rectangle where the 4K/HDR video should be — but 1080p content captures fine — this is **not** a DRM issue. On Android, 4K (especially HEVC 10-bit / HDR10 / Dolby Vision) is rendered through a **secure hardware overlay** that bypasses SurfaceFlinger. `MediaProjection` can only see content composed by SurfaceFlinger, so the overlay region comes out as solid black. This is a platform limitation that also affects every other Android ambient-light tool (Hyperion Android, Lightpack apps, etc.) — there is no app-side fix.
-
-Workarounds:
-1. **Drop the playback to 1080p** in the player/server (Jellyfin → set max bitrate / resolution per device; Kodi → adjust playback settings; mpv → `--hwdec=no` plus `--vo=gpu`). 1080p almost always goes through the regular composition stack.
-2. **Disable hardware decoding** in the player (Jellyfin Android: Settings → Player → toggle off "Prefer FMP4" and "Allow background audio playback"; in mpv → `--hwdec=no`). Software decode forces the frame through the composition path, restoring capture.
-3. **For rooted devices** — try `Screencap (Root)` or `Screencap (Shell)` capture method in Settings → these go through the `screencap` binary instead of `MediaProjection` and on many devices bypass the overlay flag.
-4. **On MediaTek SoC TVs** the experimental `MTK THAL Capture` method captures directly from the vendor DIP engine (before composition), and 4K HDR works there — but requires both root and an MTK chip.
-
-### DRM-Protected Content
-**DRM-protected applications** (such as Netflix, Disney+, Amazon Prime Video, Кинопоиск, and similar streaming services) **will not work** with screen capture mode due to Android's security restrictions. This is a fundamental limitation of the Android MediaProjection API and cannot be bypassed.
-
-**Why this happens:**
-- Android blocks screen capture of DRM-protected content to prevent piracy.
-- This is enforced at the system level and cannot be overridden by applications.
-
-**Solutions:**
-1. **Use Camera Mode**: Switch to **Camera** capture source in settings. This method uses the device camera instead of screen capture, so it works with DRM-protected content. You'll need to position a phone/tablet with the camera facing the TV screen.
-2. **Disable Ambient Light**: Turn off the ambient light feature while watching DRM-protected content.
-3. **Use Non-DRM Sources**: Watch content from sources that don't use DRM protection (local files, YouTube, etc.).
-
-**Note:** Camera mode requires proper calibration of corner positions for accurate color capture.
-
-
-## 📄 License
-See [LICENSE.txt](LICENSE.txt)
-
-## 🤝 Contributing
-Contributions are welcome! Please feel free to submit Pull Requests or Report Issues.
-
+Third-party dependencies and their licenses are documented in `THIRD_PARTY_LICENSES.md`.

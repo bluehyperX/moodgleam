@@ -20,6 +20,15 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Bluetooth permissions for Adalight SPP (HC-05) support -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
@@ -53,9 +62,9 @@
 
 
         <service
-            android:name="com.vasmarfas.UniversalAmbientLight.common.ScreenGrabberService"
+            android:name="com.bluehyperx.moodgleam.common.ScreenGrabberService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection|camera|mediaPlayback" />
+            android:foregroundServiceType="mediaProjection|camera|mediaPlayback|microphone" />
 
         <service
             android:name=".common.AccessibilityCaptureService"
@@ -71,7 +80,7 @@
         </service>
 
         <receiver
-            android:name="com.vasmarfas.UniversalAmbientLight.common.BootReceiver"
+            android:name="com.bluehyperx.moodgleam.common.BootReceiver"
             android:exported="true"
             android:label="BootReceiver">
             <intent-filter>
@@ -79,7 +88,7 @@
             </intent-filter>
         </receiver>
 
-        <activity android:name="com.vasmarfas.UniversalAmbientLight.common.BootActivity"
+        <activity android:name="com.bluehyperx.moodgleam.common.BootActivity"
             android:finishOnTaskLaunch ="true"
             android:noHistory="true"
             android:launchMode="singleInstance"
@@ -96,7 +105,7 @@
 
         <activity
             android:label="@string/toggle_activity_label"
-            android:name="com.vasmarfas.UniversalAmbientLight.common.ToggleActivity"
+            android:name="com.bluehyperx.moodgleam.common.ToggleActivity"
             android:icon="@drawable/ic_notification_icon"
             android:theme="@style/Theme.Transparent"
             android:launchMode="singleTop"

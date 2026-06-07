@@ -2,9 +2,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("com.google.gms.google-services")
-    alias(libs.plugins.firebase.crashlytics)
-    alias(libs.plugins.firebase.perf)
 }
 
 val defaultVersionName = "1.3.2"
@@ -33,11 +30,11 @@ fun getVersionCodeFrom(name: String, build: Int): Int {
 val appVersionCode = getVersionCodeFrom(appVersionName, buildNumber)
 
 android {
-    namespace = "com.vasmarfas.UniversalAmbientLight"
+    namespace = "com.bluehyperx.moodgleam"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.vasmarfas.UniversalAmbientLight"
+        applicationId = "com.bluehyperx.moodgleam"
         minSdk = 26
         targetSdk = 36
         versionName = appVersionName
@@ -64,13 +61,7 @@ android {
 
     buildTypes {
         getByName("debug") {
-            // Disable Firebase in debug builds with dummy google-services.json,
-            // but keep it enabled when a real one is present (e.g., for testing).
-            val gsFile = file("google-services.json")
-            val hasDummyFirebase = !gsFile.exists() || gsFile.readText().contains("dummy-local-dev")
-            manifestPlaceholders["firebaseCrashlyticsEnabled"] = (!hasDummyFirebase).toString()
-            manifestPlaceholders["firebaseAnalyticsDeactivated"] = hasDummyFirebase.toString()
-            manifestPlaceholders["firebasePerfDeactivated"] = hasDummyFirebase.toString()
+            // Debug build configuration
         }
         getByName("release") {
             isMinifyEnabled = false
@@ -78,7 +69,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            if (System.getenv("KEYSTORE_PATH") != null) {
+            if (System.getenv("KEYSTORE_PATH") != null && System.getenv("KEYSTORE_PATH")!!.isNotBlank()) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
@@ -146,10 +137,6 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.app.update)
-    implementation(libs.app.update.ktx)
-    implementation(libs.play.review)
-    implementation(libs.play.review.ktx)
     implementation(libs.zxing.core)
 
     // CameraX
@@ -157,50 +144,4 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
-
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.crashlytics)
-    implementation(libs.firebase.perf)
-    implementation(libs.firebase.config)
-}
-
-// Generate a dummy google-services.json for local builds when the real one is missing.
-// CI places the real file from secrets before this task runs, so it's a no-op there.
-tasks.register("generateDummyGoogleServicesJson") {
-    val gsFile = file("google-services.json")
-    onlyIf { !gsFile.exists() }
-    doLast {
-        gsFile.writeText(
-            """{
-  "project_info": {
-    "project_number": "000000000000",
-    "project_id": "dummy-local-dev",
-    "storage_bucket": "dummy-local-dev.appspot.com"
-  },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
-        "android_client_info": {
-          "package_name": "com.vasmarfas.UniversalAmbientLight"
-        }
-      },
-      "api_key": [
-        {
-          "current_key": "AIzaSyDummyLocalDevKeyNotReal000000"
-        }
-      ]
-    }
-  ],
-  "configuration_version": "1"
-}
-"""
-        )
-        logger.lifecycle("Generated dummy google-services.json for local build")
-    }
-}
-
-tasks.named("preBuild") {
-    dependsOn("generateDummyGoogleServicesJson")
 }
