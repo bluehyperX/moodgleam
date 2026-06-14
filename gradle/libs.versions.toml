@@ -1,5 +1,5 @@
 [versions]
-agp = "9.0.1"
+agp = "9.2.1"
 appUpdateKtx = "2.1.0"
 conscryptAndroid = "2.5.3"
 dadb = "1.2.10"

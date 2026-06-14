@@ -102,6 +102,8 @@ class EffectsEncoder(
         
         val globalBrightness = prefs.getInt(R.string.pref_key_color_brightness, 100) / 100f
 
+        canvas.drawColor(Color.BLACK)
+
         when (effectType) {
             "rainbow" -> {
                 val cx = width / 2f
@@ -127,10 +129,11 @@ class EffectsEncoder(
                 
                 for (y in 0 until height) {
                     val ratio = y.toFloat() / height
+                    val currentPhase = (phase + ratio) % 1.0f
                     val finalColor = when {
-                        phase < 0.33f -> interpolateColor(color1, color2, phase / 0.33f)
-                        phase < 0.66f -> interpolateColor(color2, color3, (phase - 0.33f) / 0.33f)
-                        else -> interpolateColor(color3, color4, (phase - 0.66f) / 0.34f)
+                        currentPhase < 0.33f -> interpolateColor(color1, color2, currentPhase / 0.33f)
+                        currentPhase < 0.66f -> interpolateColor(color2, color3, (currentPhase - 0.33f) / 0.33f)
+                        else -> interpolateColor(color3, color4, (currentPhase - 0.66f) / 0.34f)
                     }
                     paint.color = finalColor
                     paint.alpha = (globalBrightness * 255).toInt()
@@ -152,16 +155,41 @@ class EffectsEncoder(
             }
             "fireplace" -> {
                 paint.shader = null
-                val time = frameCount * 0.1f * speedMultiplier
-                canvas.drawColor(Color.BLACK)
+                
+                // Draw 15 rising flames
                 for (i in 0 until 15) {
-                    val x = (Math.random() * width).toFloat()
-                    val y = (height - Math.random() * height * (0.3 + sin(time + i) * 0.2)).toFloat()
-                    val size = (Math.random() * 15 + 5).toFloat()
-                    val hue = (Math.random() * 30).toFloat() // Red to Orange
+                    // Golden ratio distribution for birth phases
+                    val phase = i * 0.618f
+                    // Speed of rising (default takes ~50 frames to rise)
+                    val progress = ((frameCount * 0.02f * speedMultiplier + phase) % 1.0f)
+                    
+                    // Base X position spread across the width
+                    val baseX = ((i * 17) % width).toFloat()
+                    
+                    // Horizontal sway using sine wave
+                    val sway = (sin(progress * 2 * Math.PI + i) * 6).toFloat()
+                    val x = baseX + sway
+                    
+                    // Quadratic distribution of heights: most flames stay low, very few reach the top
+                    val ratio = (i % 7) / 6f
+                    val riseRatio = ratio * ratio
+                    val maxRise = height * (0.4f + riseRatio * 0.65f)
+                    val y = height - progress * maxRise
+                    
+                    // Shrink as it rises (but not completely to 0 to keep top LEDs colored when they reach the top)
+                    val baseSize = 8f + (i % 3) * 4f
+                    val size = baseSize * (1f - progress * 0.8f)
+                    
+                    // Color transitions from bright yellow/orange (bottom) to red (top)
+                    val hue = (40f - progress * 40f).coerceAtLeast(0f)
+                    
                     paint.color = Color.HSVToColor((globalBrightness * 255).toInt(), floatArrayOf(hue, 1f, 1f))
                     canvas.drawCircle(x, y, size, paint)
                 }
+
+                // Draw a solid yellow bed of coals at the bottom to keep bottom LEDs always yellow
+                paint.color = Color.HSVToColor((globalBrightness * 255).toInt(), floatArrayOf(40f, 1f, 1f))
+                canvas.drawRect(0f, height - 8f, width.toFloat(), height.toFloat(), paint)
             }
             "aurora" -> {
                 paint.shader = null
