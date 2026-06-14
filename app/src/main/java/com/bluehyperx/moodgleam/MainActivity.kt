@@ -682,11 +682,23 @@ fun MainScreen(
                     }
                 }
 
+                val isBtConnecting = isRunning && connectionType == "bluetooth" && connectedDeviceName == null
+                val dotColor = if (isRunning) {
+                    if (isBtConnecting) Color.Yellow else Color.Green
+                } else {
+                    Color.Gray
+                }
+                val statusText = if (isRunning) {
+                    if (isBtConnecting) "Connecting to $connectionLabel" else "Connected to $connectionLabel"
+                } else {
+                    "Disconnected"
+                }
+
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.background(Color.Black.copy(alpha = 0.4f), CircleShape).padding(horizontal = 20.dp, vertical = 10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(10.dp).background(if (isRunning) Color.Green else Color.Gray, CircleShape))
+                        Box(modifier = Modifier.size(10.dp).background(dotColor, CircleShape))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = if (isRunning) "Connected to $connectionLabel" else "Disconnected", style = MaterialTheme.typography.bodyLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(text = statusText, style = MaterialTheme.typography.bodyLarge, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                     if (deviceDetail != null && deviceDetail.isNotEmpty()) {
                         Text(text = deviceDetail, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.7f))
